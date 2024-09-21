@@ -28,4 +28,4 @@ urlpatterns = [
 from allauth.account.decorators import secure_admin_login
 
 admin.autodiscover()
-admin.site.login = secure_admin_login(admin.site.login)
+admin.site.login = secure_admin_login(admin.site.login) # type: ignore

@@ -1,6 +1,7 @@
-from typing import List, Optional
+from typing import Dict, List, Optional, Union
 
 from django.db.utils import IntegrityError
+from django.http.request import HttpRequest
 from django.shortcuts import aget_object_or_404
 from ninja import Router, Schema
 from ninja.errors import HttpError
@@ -13,13 +14,15 @@ from .models import Collection
 router = Router()
 
 
-@router.get("/health", tags=["health"])
-async def health(request):
+@router.get("/health", tags=["health"]) 
+async def health(request) -> Dict[str, str]:
     return {"status": "ok"}
 
 
 """AUTHENTICATION"""
 
+class Request(HttpRequest):
+    auth: CustomUser
 
 class Bearer(HttpBearer):
     """
@@ -35,7 +38,7 @@ class Bearer(HttpBearer):
                 The authenticated user if the token is valid, otherwise None.
     """
 
-    async def authenticate(self, request, token):
+    async def authenticate(self, request: HttpRequest, token: str) -> Optional[CustomUser]:
         try:
             user = await CustomUser.objects.aget(token=token)
             return user
@@ -66,7 +69,7 @@ class CollectionOut(Schema):
 
 
 @router.post("/collections", tags=["collections"], auth=Bearer())
-async def create_collection(request, payload: CollectionIn):
+async def create_collection(request: Request, payload: CollectionIn) -> Dict[str, Union[int, str]]:
     """
     Create a new collection.
 
@@ -92,6 +95,9 @@ async def create_collection(request, payload: CollectionIn):
 
 
 @router.get(
+    "/collections", response=List[CollectionOut], tags=["collections"], auth=Bearer()
+)
+async def list_collections(request: Request) -> List[CollectionOut]:
     """
     Endpoint to list collections.
 
@@ -106,9 +112,6 @@ async def create_collection(request, payload: CollectionIn):
     Raises:
         HTTPException: If there is an issue with the request or authentication.
     """
-    "/collections", response=List[CollectionOut], tags=["collections"], auth=Bearer()
-)
-async def list_collections(request):
     collections = []
     async for c in Collection.objects.filter(owner=request.auth):
         collections.append(CollectionOut(id=c.id, name=c.name, metadata=c.metadata))
@@ -121,7 +124,7 @@ async def list_collections(request):
     tags=["collections"],
     auth=Bearer(),
 )
-async def get_collection(request, collection_id: int):
+async def get_collection(request: Request, collection_id: int) -> CollectionOut:
     """
     Retrieve a collection by its ID.
 
@@ -153,7 +156,7 @@ async def get_collection(request, collection_id: int):
 
 
 @router.patch("/collections/{collection_id}", tags=["collections"], auth=Bearer())
-async def partial_update_collection(request, collection_id: int, payload: CollectionIn):
+async def partial_update_collection(request: Request, collection_id: int, payload: CollectionIn) -> Dict[str, str]:
     """
     Partially update a collection.
 
@@ -180,7 +183,7 @@ async def partial_update_collection(request, collection_id: int, payload: Collec
 
 
 @router.delete("/collections/{collection_id}", tags=["collections"], auth=Bearer())
-async def delete_collection(request, collection_id: int):
+async def delete_collection(request: Request, collection_id: int) -> Dict[str, str]:
     """
     Delete a collection by its ID.
 

@@ -1,6 +1,7 @@
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
 from django.db.models import JSONField
+from django_stubs_ext.db.models import TypedModelMeta
 from pgvector.django import VectorField
 
 from accounts.models import CustomUser
@@ -15,11 +16,11 @@ class Collection(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.name
 
     
-    class Meta:
+    class Meta(TypedModelMeta):
         constraints = [
             models.UniqueConstraint(fields=["name", "owner"], name="unique_collection_per_user")
         ]
@@ -33,10 +34,10 @@ class Document(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.name
 
-    class Meta:
+    class Meta(TypedModelMeta):
         constraints = [
             models.UniqueConstraint(fields=["name", "collection"], name="unique_document_per_collection")
         ]
@@ -54,7 +55,7 @@ class Page(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    class Meta:
+    class Meta(TypedModelMeta):
         constraints = [
             models.UniqueConstraint(fields=["content", "document"], name="unique_page_per_document")
         ]
