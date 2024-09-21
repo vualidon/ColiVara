@@ -24,6 +24,13 @@ Components:
    **Purpose**: Check if the API is running properly.  
    **Response**: `{ "status": "ok" }`
 
+
+# create index (collection, documents, pages with embeddings all in one go)
+# search index (search for pages with embeddings similar to a given query)
+# delete index (delete a collection and all its documents and pages)
+# Emeddings - send a document or a query, get embeddings back
+
+
 2. **Create Collection**  
    **Method**: `POST /collections`  
    **Request Body**: `{ "name": "Research Papers" }`  
@@ -68,6 +75,8 @@ Components:
    **Purpose**: Delete a collection by its `id` for a specific user.  
    **Response**: `{ "message": "Collection deleted successfully" }`
 
+
+
 7. **Get Document by ID in a Collection**  
    **Method**: `GET /collections/{collection_id}/documents/{document_id}`  
    **Purpose**: Retrieve a document from a specific collection by its `id`.  
@@ -95,6 +104,9 @@ Components:
    }
    ```
 
+# bulk upsert with files (C and U) - we create pages with embeddings here
+
+
 9. **Upsert Document to Collection**  
    **Method**: `POST collections/{collection_id}/documents`  
    **Request Body**: `{ "content": "The document text" }`  
@@ -110,16 +122,7 @@ Components:
     **Method**: `POST /collections/{collection_id}/query`  
     **Request Body**: `{ "query": "search text", "top_k": 5 }`  
     **Purpose**: Takes a query text, generates embeddings, and retrieves the top `k` documents in a specific collection based on the similarity score.  
-    **Response**:
 
-```json
-{
-  "results": [
-    { "content": "Document 1 text", "score": 0.95 },
-    { "content": "Document 2 text", "score": 0.87 }
-  ]
-}
-```
 
 11. **Embeddings Service**  
     **Method**: `POST /embeddings`  
