@@ -1,3 +1,4 @@
+import base64
 import random
 
 import pytest
@@ -178,11 +179,88 @@ async def test_delete_collection(async_client, user, collection):
     assert response.status_code == 404
 
 
+""" Document tests """
+
+
+async def test_create_document_pdf_url(async_client, user, collection):
+    response = await async_client.post(
+        "/collections/1/document",
+        json={
+            "name": "Test Document Fixture",
+            "url": "https://pdfobject.com/pdf/sample.pdf",
+        },
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"id": 1, "message": "Document created successfully"}
+
+
+async def test_create_document_pdf_base64(async_client, user, collection):
+    # test_docs/ is a directory in the root of the project - we will use a sample PDF file from there
+
+    with open("test_docs/sample.pdf", "rb") as f:
+        # convert the file to base64
+        base64_string = base64_string = base64.b64encode(f.read()).decode("utf-8")
+
+    response = await async_client.post(
+        "/collections/1/document",
+        json={
+            "name": "Test Document Fixture",
+            "base64": base64_string,
+        },
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"id": 1, "message": "Document created successfully"}
+
+
+async def test_create_document_docx_url(async_client, user, collection):
+    url = "https://www.cte.iup.edu/cte/Resources/DOCX_TestPage.docx"
+    response = await async_client.post(
+        "/collections/1/document",
+        json={
+            "name": "Test Document Fixture",
+            "url": url,
+        },
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"id": 1, "message": "Document created successfully"}
+
+
+async def test_create_document_docx_base64(async_client, user, collection):
+    with open("test_docs/sample.docx", "rb") as f:
+        # convert the file to base64
+        base64_string = base64.b64encode(f.read()).decode("utf-8")
+
+    response = await async_client.post(
+        "/collections/1/document",
+        json={
+            "name": "Test Document Fixture",
+            "base64": base64_string,
+        },
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"id": 1, "message": "Document created successfully"}
+
+
+# failing
+async def test_create_document_webpage(async_client, user, collection):
+    url = "https://gotenberg.dev/docs/getting-started/introduction"
+    response = await async_client.post(
+        "/collections/1/document",
+        json={
+            "name": "Test Document Fixture",
+            "url": url,
+        },
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"id": 1, "message": "Document created successfully"}
+
+
 # documents tests
-# 1. pdf url: https://proceedings.neurips.cc/paper_files/paper/2017/file/3f5ee243547dee91fbd053c1c4a845aa-Paper.pdf
-# 2. pdf base64
-# 3. docx url
-# 4. docx base64
 # 5. web page url
 # 6. Image url
 # 7. Image base64

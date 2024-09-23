@@ -356,7 +356,17 @@ class Document(models.Model):
         # Determine file type
         mime_type = get_mime_type(document_data)
         extension = mimetypes.guess_extension(mime_type)
-
+        # hard-code some mimetype that guess_extesion can't handle
+        hardcode_mimetypes = {
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+            "application/msword": ".doc",
+            "application/vnd.ms-powerpoint": ".ppt",
+            "application/vnd.ms-excel": ".xls",
+        }
+        if extension is None:
+            extension = hardcode_mimetypes.get(mime_type, None)
         if extension:
             extension = extension[1:].lower()
         else:
@@ -372,6 +382,7 @@ class Document(models.Model):
         # Step 2: Convert to PDF if necessary
         if not is_image and not is_pdf:
             # Use Gotenberg to convert to PDF
+            filename = f"{filename}.{extension}"
             pdf_data = await self._convert_to_pdf(document_data, filename)
         elif is_pdf:
             pdf_data = document_data
@@ -414,7 +425,6 @@ class Document(models.Model):
             "files",
             document_data,
             filename=filename,
-            content_type="application/octet-stream",
         )
 
         # Set Gotenberg's specific headers if needed (adjust according to your Gotenberg setup)
