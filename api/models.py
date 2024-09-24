@@ -10,7 +10,6 @@ from typing import List
 import aiohttp
 import magic
 from django.conf import settings
-from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import JSONField
@@ -123,25 +122,32 @@ class Document(models.Model):
             "object": "embedding",
         }
         """
-        pages = []
-        for batch in batches:
-            embeddings = await send_batch(batch)
-            for embedding in embeddings:
-                page = Page(
-                    document=self,
-                    page_number=embedding["index"] + 1,
-                    embeddings=embedding["embedding"],
-                    img_base64=batch[embedding["index"]],
-                )
-                pages.append(page)
-
-        # we save the document first, then save the pages
-        await self.asave()
         try:
-            await Page.objects.abulk_create(pages)
+            # we save the document first, then save the pages
+            await self.asave()
+
+            for batch in batches:
+                embeddings_objects = await send_batch(batch)
+                for embedding_obj in embeddings_objects:
+                    # we want to assert that the embeddings is a list of a list of 128 floats
+                    assert (
+                        isinstance(embedding_obj["embedding"], list)
+                        and isinstance(embedding_obj["embedding"][0], list)
+                        and len(embedding_obj["embedding"][0]) == 128
+                    ), "Embedding is not a list of a list of 128 floats"
+                    page = Page(
+                        document=self,
+                        page_number=embedding_obj["index"] + 1,
+                        img_base64=batch[embedding_obj["index"]],
+                    )
+                    await page.asave()
+                    for embedding in embedding_obj["embedding"]:
+                        embedding = PageEmbedding(page=page, embedding=embedding)
+                        await embedding.asave()
+
         except Exception as e:
-            # if there is an error in saving the pages, we delete the document
-            await self.adelete()
+            # If there's an error, delete the document and pages
+            await self.adelete()  # will cascade delete the pages
             raise ValidationError(f"Failed to save pages: {str(e)}")
 
         return
@@ -473,10 +479,16 @@ class Page(models.Model):
     page_number = models.IntegerField()
     content = models.TextField(blank=True)
     img_base64 = models.TextField(blank=True)
-    embeddings = ArrayField(VectorField(dimensions=128))
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    def __str__(self) -> str:
+        return f"{self.document.name} - Page {self.page_number}"
 
-# TO DO: Post save signal on page to get the content via OCR
+
+class PageEmbedding(models.Model):
+    page = models.ForeignKey(Page, on_delete=models.CASCADE, related_name="embeddings")
+    embedding = VectorField(dimensions=128)
+
+
 # TO DO: Post save signal on page to get the content via OCR

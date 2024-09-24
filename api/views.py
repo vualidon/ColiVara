@@ -1,6 +1,7 @@
 from typing import Dict, List, Optional, Union
 
 from django.core.exceptions import ValidationError
+from django.db.models import Count
 from django.db.utils import IntegrityError
 from django.http.request import HttpRequest
 from django.shortcuts import aget_object_or_404
@@ -236,6 +237,31 @@ class DocumentIn(Schema):
         return self
 
 
+class PageOut(Schema):
+    document_name: Optional[str] = None
+    img_base64: str
+    page_number: int
+
+
+class DocumentOut(Schema):
+    id: int
+    name: str
+    metadata: dict = Field(default_factory=dict)
+    url: Optional[str] = None
+    base64: Optional[str] = None
+    num_pages: int
+    collection_name: str
+    pages: Optional[List[PageOut]] = None
+
+    @model_validator(mode="after")
+    def base64_or_url(self) -> Self:
+        if not self.url and not self.base64:
+            raise ValueError("Either 'url' or 'base64' must be provided.")
+        if self.url and self.base64:
+            raise ValueError("Only one of 'url' or 'base64' should be provided.")
+        return self
+
+
 @router.post("/collections/{collection_id}/document", tags=["documents"], auth=Bearer())
 async def upsert_document(
     request: Request, collection_id: int, payload: DocumentIn
@@ -293,6 +319,46 @@ async def upsert_document(
         raise HttpError(400, str(e))
 
 
+@router.get(
+    "/collections/{collection_id}/documents/{document_id}",
+    tags=["documents"],
+    auth=Bearer(),
+    response=DocumentOut,
+)
+async def get_document(
+    request, collection_id: int, document_id: int, expand: Optional[str] = None
+) -> DocumentOut:
+    document = await aget_object_or_404(
+        Document.objects.select_related("collection").annotate(
+            num_pages=Count("pages")
+        ),
+        id=document_id,
+        collection_id=collection_id,
+    )
+    document_out = DocumentOut(
+        id=document.id,
+        name=document.name,
+        metadata=document.metadata,
+        url=document.url,
+        base64=document.base64,
+        num_pages=document.num_pages,
+        collection_name=document.collection.name,
+    )
+    if expand and "pages" in expand.split(","):
+        document_out.pages = []
+        async for page in document.pages.all():
+            document_out.pages.append(
+                PageOut(
+                    document_name=document.name,
+                    img_base64=page.img_base64,
+                    page_number=page.page_number,
+                )
+            )
+    return document_out
+
+
 # search index (search for pages with embeddings similar to a given query)
 # delete index (delete a collection and all its documents and pages)
+# Emeddings - send a document or a query, get embeddings back - Example Response {"page_1": [0.1, 0.2, 0.3, ...], "page_2": [0.4, 0.5, 0.6, ...]}
+# Emeddings - send a document or a query, get embeddings back - Example Response {"page_1": [0.1, 0.2, 0.3, ...], "page_2": [0.4, 0.5, 0.6, ...]}
 # Emeddings - send a document or a query, get embeddings back - Example Response {"page_1": [0.1, 0.2, 0.3, ...], "page_2": [0.4, 0.5, 0.6, ...]}

@@ -5,7 +5,7 @@ from ninja.testing import TestAsyncClient
 
 from accounts.models import CustomUser
 
-from .models import Collection, Document
+from .models import Collection, Document, Page, PageEmbedding
 from .views import Bearer, router
 
 
@@ -60,6 +60,31 @@ async def collection(user):
         name="Test Collection Fixture", metadata={"key": "value"}, owner=user
     )
     return collection
+
+
+@pytest.fixture
+async def document(user, collection):
+    """
+    Fixture to create a test document.
+    """
+    # delete any existing documents
+    await Document.objects.all().adelete()
+    document, _ = await Document.objects.aget_or_create(
+        name="Test Document Fixture",
+        collection=collection,
+        url="https://www.example.com",
+    )
+    # create a page for the document
+    page = await Page.objects.acreate(
+        document=document,
+        page_number=1,
+        img_base64="base64_string",
+    )
+    await PageEmbedding.objects.acreate(
+        page=page,
+        embedding=[0.1 for _ in range(128)],
+    )
+    return document
 
 
 async def test_valid_token(bearer, user):
@@ -294,3 +319,27 @@ async def test_create_document_image_base64(async_client, user, collection):
     )
     assert response.status_code == 200
     assert response.json() == {"id": 1, "message": "Document created successfully"}
+
+
+async def test_get_document_by_id(async_client, user, collection, document):
+    response = await async_client.get(
+        "/collections/1/documents/1?expand=pages",
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": 1,
+        "name": "Test Document Fixture",
+        "metadata": {},
+        "url": "https://www.example.com",
+        "base64": "",
+        "num_pages": 1,
+        "collection_name": "Test Collection Fixture",
+        "pages": [
+            {
+                "document_name": "Test Document Fixture",
+                "img_base64": "base64_string",
+                "page_number": 1,
+            }
+        ],
+    }
