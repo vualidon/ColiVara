@@ -1,12 +1,11 @@
 import base64
-import random
 
 import pytest
 from ninja.testing import TestAsyncClient
 
 from accounts.models import CustomUser
 
-from .models import Collection
+from .models import Collection, Document
 from .views import Bearer, router
 
 
@@ -15,7 +14,7 @@ async def test_sanity():
     assert 1 == 1
 
 
-pytestmark = [pytest.mark.django_db]
+pytestmark = [pytest.mark.django_db(transaction=True, reset_sequences=True)]
 
 """ Authentication tests """
 
@@ -26,6 +25,8 @@ async def user(db):
     Fixture to create a test user with a token.
     """
     # get or create a user
+    # delete any existing users
+    await CustomUser.objects.all().adelete()
     user, _ = await CustomUser.objects.aget_or_create(
         username="test_user", token="valid_token"
     )
@@ -53,9 +54,12 @@ async def collection(user):
     """
     Fixture to create a test collection.
     """
-    return await Collection.objects.aget_or_create(
+    # delete any existing collections
+    await Collection.objects.all().adelete()
+    collection, _ = await Collection.objects.aget_or_create(
         name="Test Collection Fixture", metadata={"key": "value"}, owner=user
     )
+    return collection
 
 
 async def test_valid_token(bearer, user):
@@ -227,6 +231,8 @@ async def test_create_document_docx_url(async_client, user, collection):
     assert response.status_code == 200
     assert response.json() == {"id": 1, "message": "Document created successfully"}
 
+    await Document.objects.all().adelete()
+
 
 async def test_create_document_docx_base64(async_client, user, collection):
     with open("test_docs/sample.docx", "rb") as f:
@@ -245,7 +251,6 @@ async def test_create_document_docx_base64(async_client, user, collection):
     assert response.json() == {"id": 1, "message": "Document created successfully"}
 
 
-# failing
 async def test_create_document_webpage(async_client, user, collection):
     url = "https://gotenberg.dev/docs/getting-started/introduction"
     response = await async_client.post(
@@ -260,7 +265,32 @@ async def test_create_document_webpage(async_client, user, collection):
     assert response.json() == {"id": 1, "message": "Document created successfully"}
 
 
-# documents tests
-# 5. web page url
-# 6. Image url
-# 7. Image base64
+async def test_create_document_image_url(async_client, user, collection):
+    url = "https://www.w3schools.com/w3css/img_lights.jpg"
+    response = await async_client.post(
+        "/collections/1/document",
+        json={
+            "name": "Test Document Fixture",
+            "url": url,
+        },
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"id": 1, "message": "Document created successfully"}
+
+
+async def test_create_document_image_base64(async_client, user, collection):
+    with open("test_docs/sample.png", "rb") as f:
+        # convert the file to base64
+        base64_string = base64.b64encode(f.read()).decode("utf-8")
+
+    response = await async_client.post(
+        "/collections/1/document",
+        json={
+            "name": "Test Document Fixture",
+            "base64": base64_string,
+        },
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"id": 1, "message": "Document created successfully"}

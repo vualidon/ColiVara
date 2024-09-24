@@ -1,9 +1,9 @@
 import base64
-import binascii
 import mimetypes
 import os
 import re
 import urllib.parse
+from binascii import Error as BinasciiError
 from io import BytesIO
 from typing import List
 
@@ -290,7 +290,7 @@ class Document(models.Model):
             "zabw",
         ]
         ALLOWED_EXTENSIONS += IMAGE_EXTENSIONS  # Include images
-        MAX_SIZE_BYTES = 200 * 1024 * 1024  # 200 MB
+        MAX_SIZE_BYTES = 50 * 1024 * 1024  # 50 MB
 
         # Helper function to get file extension
         def get_extension(filename):
@@ -346,12 +346,13 @@ class Document(models.Model):
             try:
                 document_data = base64.b64decode(self.base64)
                 filename = "document"
-            except base64.binascii.Error:
+            except BinasciiError:
                 raise ValidationError("Invalid base64 content.")
 
         # Validate the size
+        assert document_data is not None, "document_data should not be None"
         if len(document_data) > MAX_SIZE_BYTES:
-            raise ValidationError("Document exceeds maximum size of 200MB.")
+            raise ValidationError("Document exceeds maximum size of 50MB.")
 
         # Determine file type
         mime_type = get_mime_type(document_data)
@@ -452,16 +453,10 @@ class Document(models.Model):
 
         # Prepare the form data for Gotenberg
         form = aiohttp.FormData()
-        form.add_field("url", url)
-
-        headers = {
-            "Accept": "application/pdf",
-        }
+        form.add_field("url", url, content_type="text/plain")
 
         async with aiohttp.ClientSession() as session:
-            async with session.post(
-                gotenberg_url, data=form, headers=headers
-            ) as response:
+            async with session.post(gotenberg_url, data=form) as response:
                 if response.status != 200:
                     error_message = await response.text()
                     raise ValidationError(
@@ -483,4 +478,5 @@ class Page(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
 
+# TO DO: Post save signal on page to get the content via OCR
 # TO DO: Post save signal on page to get the content via OCR

@@ -215,7 +215,6 @@ async def delete_collection(request: Request, collection_id: int) -> Dict[str, s
 
 """Documents"""
 
-# bulk upsert with files (C and U) - we create pages with embeddings here
 # get document by id (R)
 # list documents in collection (R)
 # patch document by id (U)
@@ -237,7 +236,6 @@ class DocumentIn(Schema):
         return self
 
 
-# Upsert document in a collection - single document
 @router.post("/collections/{collection_id}/document", tags=["documents"], auth=Bearer())
 async def upsert_document(
     request: Request, collection_id: int, payload: DocumentIn
