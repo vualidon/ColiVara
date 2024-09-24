@@ -363,3 +363,66 @@ async def test_get_documents(async_client, user, collection, document):
             "pages": None,
         }
     ]
+
+
+async def test_patch_document_no_embed(async_client, user, collection, document):
+    response = await async_client.patch(
+        "/collections/1/documents/1",
+        json={"name": "Test Document Update", "metadata": {"key": "value"}},
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"message": "Document updated successfully"}
+
+    # now check if the document was actually updated
+    response = await async_client.get(
+        "/collections/1/documents/1",
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": 1,
+        "name": "Test Document Update",
+        "metadata": {"key": "value"},
+        "url": "https://www.example.com",
+        "base64": "",
+        "num_pages": 1,
+        "collection_name": "Test Collection Fixture",
+        "pages": None,
+    }
+
+
+async def test_patch_document_embed(async_client, user, collection, document):
+    # we will change the base64 string of the page
+    with open("test_docs/sample.png", "rb") as f:
+        # convert the file to base64
+        base64_string = base64.b64encode(f.read()).decode("utf-8")
+
+    # we updated the base64 string of the page
+    response = await async_client.patch(
+        "/collections/1/documents/1",
+        json={
+            "name": "Test Document Update",
+            "base64": base64_string,
+            "metadata": {"key": "value"},
+        },
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"message": "Document updated successfully"}
+
+
+async def test_delete_document(async_client, user, collection, document):
+    response = await async_client.delete(
+        "/collections/1/documents/1",
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {"message": "Document deleted successfully"}
+
+    # now check if the document was actually deleted
+    response = await async_client.get(
+        "/collections/1/documents/1",
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 404

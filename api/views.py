@@ -216,10 +216,6 @@ async def delete_collection(request: Request, collection_id: int) -> Dict[str, s
 
 """Documents"""
 
-# list documents in collection (R)
-# patch document by id (U)
-# delete document by id (D)
-
 
 class DocumentIn(Schema):
     name: str
@@ -256,6 +252,21 @@ class DocumentOut(Schema):
     def base64_or_url(self) -> Self:
         if not self.url and not self.base64:
             raise ValueError("Either 'url' or 'base64' must be provided.")
+        if self.url and self.base64:
+            raise ValueError("Only one of 'url' or 'base64' should be provided.")
+        return self
+
+
+class DocumentInPatch(Schema):
+    name: Optional[str] = None
+    metadata: Optional[dict] = Field(default_factory=dict)
+    url: Optional[str] = None
+    base64: Optional[str] = None
+
+    @model_validator(mode="after")
+    def at_least_one_field(self) -> Self:
+        if not any([self.name, self.metadata, self.url, self.base64]):
+            raise ValueError("At least one field must be provided to update.")
         if self.url and self.base64:
             raise ValueError("Only one of 'url' or 'base64' should be provided.")
         return self
@@ -432,6 +443,89 @@ async def list_documents(
     return documents
 
 
+@router.patch(
+    "/collections/{collection_id}/documents/{document_id}",
+    tags=["documents"],
+    auth=Bearer(),
+)
+async def partial_update_document(
+    request: Request, collection_id: int, document_id: int, payload: DocumentInPatch
+) -> Dict[str, str]:
+    """
+    Partially update a document.
+
+    This endpoint allows for partial updates to a document's details. Only the fields provided in the payload will be updated.
+    If the URL or base64 content is changed, the document will be re-embedded. Otherwise, only the metadata and name will be updated.
+
+    Args:
+        request: The request object containing authentication details.
+        collection_id (int): The ID of the collection to which the document belongs.
+        document_id (int): The ID of the document to be updated.
+        payload (DocumentIn): The payload containing the fields to be updated.
+
+    Returns:
+        dict: A message indicating the document was updated successfully.
+
+    Raises:
+        HTTPException: If the document is not found or the user is not authorized to update it.
+    """
+    document = await aget_object_or_404(
+        Document.objects.select_related("collection"),
+        id=document_id,
+        collection_id=collection_id,
+    )
+    if (payload.url and payload.url != document.url) or (
+        payload.base64 and payload.base64 != document.base64
+    ):
+        # user had base64, but now gave url = delete base64 and embed url
+        # user had url, but now gave base64 = delete url and embed base64
+        # user had url, and now gave new url = embed url. Same url? no change
+        # user had base64, and now gave new base64 = embed base64. Same base64? no change
+        document.url = payload.url or ""
+        document.base64 = payload.base64 or ""
+        document.metadata = payload.metadata or document.metadata
+        document.name = payload.name or document.name
+        await document.embed_document()
+    else:
+        document.name = payload.name or document.name
+        document.metadata = payload.metadata or document.metadata
+        await document.asave()
+    return {"message": "Document updated successfully"}
+
+
+@router.delete(
+    "/collections/{collection_id}/documents/{document_id}",
+    tags=["documents"],
+    auth=Bearer(),
+)
+async def delete_document(
+    request: Request, collection_id: int, document_id: int
+) -> Dict[str, str]:
+    """
+    Delete a document by its ID.
+
+    This endpoint deletes a document specified by the `document_id` parameter.
+    The document must belong to the authenticated user.
+
+    Args:
+        request: The HTTP request object, which includes authentication information.
+        collection_id (int): The ID of the collection containing the document.
+        document_id (int): The ID of the document to be deleted.
+
+    Returns:
+        dict: A message indicating that the document was deleted successfully.
+
+    Raises:
+        HTTPException: If the document does not exist or does not belong to the authenticated user.
+    """
+    document = await aget_object_or_404(
+        Document.objects.select_related("collection"),
+        id=document_id,
+        collection_id=collection_id,
+    )
+    await document.adelete()
+    return {"message": "Document deleted successfully"}
+
+
 # search index (search for pages with embeddings similar to a given query)
-# delete index (delete a collection and all its documents and pages)
 # Emeddings - send a document or a query, get embeddings back - Example Response {"page_1": [0.1, 0.2, 0.3, ...], "page_2": [0.4, 0.5, 0.6, ...]}
