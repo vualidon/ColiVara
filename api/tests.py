@@ -343,3 +343,23 @@ async def test_get_document_by_id(async_client, user, collection, document):
             }
         ],
     }
+
+
+async def test_get_documents(async_client, user, collection, document):
+    response = await async_client.get(
+        "/collections/1/documents",
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 200
+    assert response.json() == [
+        {
+            "id": 1,
+            "name": "Test Document Fixture",
+            "metadata": {},
+            "url": "https://www.example.com",
+            "base64": "",
+            "num_pages": 1,
+            "collection_name": "Test Collection Fixture",
+            "pages": None,
+        }
+    ]

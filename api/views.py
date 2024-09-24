@@ -216,7 +216,6 @@ async def delete_collection(request: Request, collection_id: int) -> Dict[str, s
 
 """Documents"""
 
-# get document by id (R)
 # list documents in collection (R)
 # patch document by id (U)
 # delete document by id (D)
@@ -328,6 +327,22 @@ async def upsert_document(
 async def get_document(
     request, collection_id: int, document_id: int, expand: Optional[str] = None
 ) -> DocumentOut:
+    """
+    Retrieve a specific document from a collection.
+
+    Args:
+        request: The HTTP request object.
+        collection_id (int): The ID of the collection containing the document.
+        document_id (int): The ID of the document to retrieve.
+        expand (Optional[str]): A comma-separated list of fields to expand in the response.
+                                If "pages" is included, the document's pages will be included.
+
+    Returns:
+        DocumentOut: The retrieved document with its details.
+
+    Raises:
+        HTTPException: If the document or collection is not found.
+    """
     document = await aget_object_or_404(
         Document.objects.select_related("collection").annotate(
             num_pages=Count("pages")
@@ -357,8 +372,66 @@ async def get_document(
     return document_out
 
 
+@router.get(
+    "/collections/{collection_id}/documents",
+    tags=["documents"],
+    auth=Bearer(),
+    response=List[DocumentOut],
+)
+async def list_documents(
+    request: Request, collection_id: int, expand: Optional[str] = None
+) -> List[DocumentOut]:
+    """
+    Fetch a list of documents for a given collection.
+
+    This endpoint retrieves documents associated with a specified collection ID.
+    Optionally, it can expand the response to include pages of each document.
+
+    Args:
+        request (Request): The request object.
+        collection_id (int): The ID of the collection to fetch documents from.
+        expand (Optional[str]): A comma-separated string specifying additional fields to include in the response.
+                                If "pages" is included, the pages of each document will be included.
+
+    Returns:
+        List[DocumentOut]: A list of documents with their details. If expanded, includes pages of each document.
+
+    Raises:
+        HTTPException: If the collection or documents are not found.
+
+    Example:
+        GET /collections/1/documents?expand=pages
+    """
+
+    documents = []
+    async for document in (
+        Document.objects.select_related("collection")
+        .annotate(num_pages=Count("pages"))
+        .filter(collection_id=collection_id)
+    ):
+        document_out = DocumentOut(
+            id=document.id,
+            name=document.name,
+            metadata=document.metadata,
+            url=document.url,
+            base64=document.base64,
+            num_pages=document.num_pages,
+            collection_name=document.collection.name,
+        )
+        if expand and "pages" in expand.split(","):
+            document_out.pages = []
+            async for page in document.pages.all():
+                document_out.pages.append(
+                    PageOut(
+                        document_name=document.name,
+                        img_base64=page.img_base64,
+                        page_number=page.page_number,
+                    )
+                )
+        documents.append(document_out)
+    return documents
+
+
 # search index (search for pages with embeddings similar to a given query)
 # delete index (delete a collection and all its documents and pages)
-# Emeddings - send a document or a query, get embeddings back - Example Response {"page_1": [0.1, 0.2, 0.3, ...], "page_2": [0.4, 0.5, 0.6, ...]}
-# Emeddings - send a document or a query, get embeddings back - Example Response {"page_1": [0.1, 0.2, 0.3, ...], "page_2": [0.4, 0.5, 0.6, ...]}
 # Emeddings - send a document or a query, get embeddings back - Example Response {"page_1": [0.1, 0.2, 0.3, ...], "page_2": [0.4, 0.5, 0.6, ...]}
