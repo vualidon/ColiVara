@@ -77,7 +77,7 @@ user = CustomUser.objects.first().token # save this token somewhere (I will make
 
 4. Application will be running at http://localhost:8001 and the swagger documentation at http://localhost:8001/v1/docs
 
-5. To run tests - we have close to 100% coverage
+5. To run tests - we have 92% test coverage
 
 ```
 docker-compose exec web pytest

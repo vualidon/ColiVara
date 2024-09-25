@@ -426,3 +426,13 @@ async def test_delete_document(async_client, user, collection, document):
         headers={"Authorization": f"Bearer {user.token}"},
     )
     assert response.status_code == 404
+
+
+async def test_search_documents(async_client, user, collection, document):
+    response = await async_client.post(
+        "/search",
+        json={"query": "What is 1 + 1", "top_k": 1},
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 200
+    assert response.json() != []
