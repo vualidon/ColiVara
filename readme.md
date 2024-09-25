@@ -4,7 +4,7 @@ A document retrieval API with ColiPali as the backend.
 
 Components:
 
-1. Embeddings Service. Currently running as a seperate serverless function. Repo: [embeddings-service](https://github.com/tjmlabs/colipali-embeddings)
+1. Embeddings Service. Currently running as a seperate serverless function. Repo: [embeddings-service](https://github.com/tjmlabs/colipali-embeddings) - plan is to move this to the same docker-compose as the API as an optional service. (you need a GPU for this)
 
 2. Postgres DB with pgvector extension for storing embeddings.
 
@@ -20,11 +20,6 @@ Components:
 
 ### Endpoints:
 
-1. **Health Check**  
-   **Method**: `GET /health`  
-   **Purpose**: Check if the API is running properly.  
-   **Response**: `{ "status": "ok" }`
-
 Please check swagger documentation endpoint (v1/docs) for rest of endpoints. Typical flow
 
 1. Create empty collection with metadata via Create Collection endpoint
@@ -32,6 +27,8 @@ Please check swagger documentation endpoint (v1/docs) for rest of endpoints. Typ
 3. Search for documents in the collection via Search endpoint with Query and optional filtering. You will get back top k(3) pages with document and collection details.
 
 There is endpoints for updating and deleting collections and documents as well.
+
+You can import an openAPI spec (for example for Postman) from the swagger documentation endpoint at `v1/docs/openapi.json`
 
 ## Roadmap for 1.0 Release
 
@@ -77,3 +74,19 @@ docker-compose exec web python manage.py shell
 from accounts.models import CustomUser
 user = CustomUser.objects.first().token # save this token somewhere (I will make this easier in the future)
 ```
+
+4. Application will be running at http://localhost:8001 and the swagger documentation at http://localhost:8001/v1/docs
+
+5. To run tests - we have close to 100% coverage
+
+```
+docker-compose exec web pytest
+```
+
+6. mypy for type checking
+
+```
+docker-compose exec web mypy .
+```
+
+7. We use ruff as linter and formatting. Eventaully will setup pre-commit hooks for this.

@@ -163,7 +163,7 @@ else:
     EMAIL_HOST_USER = env("EMAIL_USER", default="dummy user")
     EMAIL_HOST_PASSWORD = env("EMAIL_PASSWORD", default="dummy password")
     EMAIL_USE_TLS = True
-DEFAULT_EMAIL_FROM = env("DEFAULT_EMAIL_FROM")
+DEFAULT_EMAIL_FROM = env("DEFAULT_EMAIL_FROM", default="dummy-email@example.com")
 
 
 # allauth settings

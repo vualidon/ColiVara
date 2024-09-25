@@ -580,32 +580,28 @@ async def search(request: Request, payload: QueryIn) -> QueryOut:
         collection = await aget_object_or_404(Collection, id=payload.collection_id)
         documents_qs = Document.objects.filter(collection=collection)
     else:
-        documents_qs = await Document.objects.filter(collection__owner=request.auth)
+        documents_qs = Document.objects.filter(collection__owner=request.auth)
 
     prefetch_pages = Prefetch(
         "pages", queryset=Page.objects.prefetch_related("embeddings")
     )
     documents_qs = documents_qs.prefetch_related(prefetch_pages)
-    documents = await documents_qs.all()
-    pages = []
-    for document in documents:
-        for page in document.pages.all():
+    documents = documents_qs.all()
+    pages: List[Dict[str, Union[int, List[float]]]] = []
+    async for document in documents:
+        async for page in document.pages.all():
             # Extract all embeddings for the current page
             embeddings = [
                 embedding.embedding.tolist() for embedding in page.embeddings.all()
             ]
             pages.append({"id": page.id, "embeddings": embeddings})
-    # sanity check - confirm individual embeddings length is 128
-    # pages[0] is the first page, pages[0]["embeddings"] is the list of embeddings for that page, pages[0]["embeddings"][0] is the first embedding
-    assert (
-        len(pages[0]["embeddings"][0]) == 128
-    ), "Embedding length is not 128 - something went wrong"
-    results = await search_index(payload.query, pages, payload.top_k)
+    top_k = payload.top_k or 3
+    results = await search_index(payload.query, pages, top_k)
     return results
 
 
 async def search_index(
-    query: str, pages: List[Dict[str, Union[int, List[float]]]], top_k: int
+    query: str, pages: List[Dict[str, Union[int, List[float]]]], top_k: int = 3
 ) -> QueryOut:
     """
     Search for pages similar to a given query.
@@ -658,15 +654,27 @@ async def search_index(
 
     # now we have all the scores, we need to sort them and return the top k
     output = sorted(results, key=lambda x: x["score"], reverse=True)[:top_k]
+    # Extract all page_ids from the top results
+    page_ids = [res["id"] for res in output]
+    # Batch fetch all Page objects with related Document and Collection in a single query
+    pages_queryset = Page.objects.filter(id__in=page_ids).select_related(
+        "document__collection"
+    )
+    pages_fetched = pages_queryset.all()
+    # Create a mapping from page_id to Page object for quick access
+    page_map = {}
+    async for page in pages_fetched:
+        page_map[page.id] = page
 
-    final_results = []
+    final_results: List[PageOutQuery] = []
     for res in output:
         page_id = res["id"]
         score = res["score"]
-        page = await Page.objects.aget(id=page_id)
+        page = page_map.get(page_id)  # type: ignore
         document = page.document
         collection = document.collection
-        results.append(
+
+        final_results.append(
             PageOutQuery(
                 collection_name=collection.name,
                 collection_id=collection.id,

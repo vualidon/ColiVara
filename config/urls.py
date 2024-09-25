@@ -1,3 +1,5 @@
+# protect the admin login page
+from allauth.account.decorators import secure_admin_login
 from django.contrib import admin
 from django.http import HttpResponse
 from django.urls import include, path
@@ -24,8 +26,5 @@ urlpatterns = [
 ]
 
 
-# protect the admin login page
-from allauth.account.decorators import secure_admin_login
-
 admin.autodiscover()
-admin.site.login = secure_admin_login(admin.site.login) # type: ignore
+admin.site.login = secure_admin_login(admin.site.login)  # type: ignore
