@@ -317,7 +317,7 @@ class Document(models.Model):
                         raise ValidationError("Failed to fetch document from URL")
                     content_length = response.headers.get("Content-Length")
                     if content_length and int(content_length) > MAX_SIZE_BYTES:
-                        raise ValidationError("Document exceeds maximum size of 15MB.")
+                        raise ValidationError("Document exceeds maximum size of 50MB.")
                     content_disposition = response.headers.get(
                         "Content-Disposition", ""
                     )
