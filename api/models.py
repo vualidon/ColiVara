@@ -126,18 +126,21 @@ class Document(models.Model):
             # we save the document first, then save the pages
             await self.asave()
 
-            for batch in batches:
+            for i, batch in enumerate(batches):
                 embeddings_objects = await send_batch(batch)
-                for embedding_obj in embeddings_objects:
+                for idx, embedding_obj in enumerate(embeddings_objects):
                     # we want to assert that the embeddings is a list of a list of 128 floats
                     assert (
                         isinstance(embedding_obj["embedding"], list)
                         and isinstance(embedding_obj["embedding"][0], list)
                         and len(embedding_obj["embedding"][0]) == 128
                     ), "Embedding is not a list of a list of 128 floats"
+
+                    # we want the true page number. since we are doing inner loop, we need to add the index of the batch
+
                     page = Page(
                         document=self,
-                        page_number=embedding_obj["index"] + 1,
+                        page_number=i * EMBEDDINGS_BATCH_SIZE + idx + 1,
                         img_base64=batch[embedding_obj["index"]],
                     )
                     await page.asave()
@@ -152,7 +155,7 @@ class Document(models.Model):
 
         return
 
-    async def _prep_document(self) -> List[str]:
+    async def _prep_document(self, document_data=None) -> List[str]:
         """
         The goal of this method is to take a document and convert it into a series of base64 images.
         Steps:
@@ -327,11 +330,10 @@ class Document(models.Model):
                     return await response.read(), filename
 
         # Step 1: Validate the document
-        document_data = None
         filename = None
 
         # every block should give back a document_data and filename
-        if self.url:
+        if self.url and not document_data:
             parsed_url = urllib.parse.urlparse(self.url)
             url_extension = get_extension(parsed_url.path)
 
@@ -347,13 +349,15 @@ class Document(models.Model):
             else:
                 document_data, filename = await fetch_document(self.url)
 
-        elif self.base64:
+        elif self.base64 and not document_data:
             # Decode base64 content
             try:
                 document_data = base64.b64decode(self.base64)
                 filename = "document"
             except BinasciiError:
                 raise ValidationError("Invalid base64 content.")
+
+        # here we should have a document_data and filename
 
         # Validate the size
         assert document_data is not None, "document_data should not be None"

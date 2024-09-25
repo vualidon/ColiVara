@@ -1,19 +1,23 @@
+import base64
 from typing import Dict, List, Optional, Union
 
+import aiohttp
+from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db.models import Count
+from django.db.models import Count, Prefetch
 from django.db.utils import IntegrityError
 from django.http.request import HttpRequest
 from django.shortcuts import aget_object_or_404
-from ninja import Router, Schema
+from ninja import File, Router, Schema
 from ninja.errors import HttpError
+from ninja.files import UploadedFile
 from ninja.security import HttpBearer
 from pydantic import Field, model_validator
 from typing_extensions import Self
 
 from accounts.models import CustomUser
 
-from .models import Collection, Document
+from .models import Collection, Document, Page
 
 router = Router()
 
@@ -527,5 +531,203 @@ async def delete_document(
     return {"message": "Document deleted successfully"}
 
 
-# search index (search for pages with embeddings similar to a given query)
+""" Search """
+
+
+class QueryIn(Schema):
+    query: str
+    collection_id: Optional[int] = None
+    top_k: Optional[int] = 3
+
+
+class PageOutQuery(Schema):
+    collection_name: str
+    collection_id: int
+    collection_metadata: Optional[dict] = {}
+    document_name: str
+    document_id: int
+    document_metadata: Optional[dict] = {}
+    page_number: int
+    score: float
+    img_base64: str
+
+
+class QueryOut(Schema):
+    query: str
+    results: List[PageOutQuery]
+
+
+@router.post("/search", tags=["search"], auth=Bearer())
+async def search(request: Request, payload: QueryIn) -> QueryOut:
+    """
+    Search for pages similar to a given query.
+
+    This endpoint allows the user to search for pages similar to a given query.
+    The search is performed across all documents in the specified collection.
+
+    Args:
+        request: The HTTP request object, which includes the user information.
+        payload (QueryIn): The input data for the search, which includes the query string and collection ID.
+
+    Returns:
+        QueryOut: The search results, including the query and a list of similar pages.
+
+    Raises:
+        HttpError: If the collection does not exist or the query is invalid.
+    """
+    # collection id is optional, so if not provided, search across all the user collections
+    if payload.collection_id:
+        collection = await aget_object_or_404(Collection, id=payload.collection_id)
+        documents_qs = Document.objects.filter(collection=collection)
+    else:
+        documents_qs = await Document.objects.filter(collection__owner=request.auth)
+
+    prefetch_pages = Prefetch(
+        "pages", queryset=Page.objects.prefetch_related("embeddings")
+    )
+    documents_qs = documents_qs.prefetch_related(prefetch_pages)
+    documents = await documents_qs.all()
+    pages = []
+    for document in documents:
+        for page in document.pages.all():
+            # Extract all embeddings for the current page
+            embeddings = [
+                embedding.embedding.tolist() for embedding in page.embeddings.all()
+            ]
+            pages.append({"id": page.id, "embeddings": embeddings})
+    # sanity check - confirm individual embeddings length is 128
+    # pages[0] is the first page, pages[0]["embeddings"] is the list of embeddings for that page, pages[0]["embeddings"][0] is the first embedding
+    assert (
+        len(pages[0]["embeddings"][0]) == 128
+    ), "Embedding length is not 128 - something went wrong"
+    results = await search_index(payload.query, pages, payload.top_k)
+    return results
+
+
+async def search_index(
+    query: str, pages: List[Dict[str, Union[int, List[float]]]], top_k: int
+) -> QueryOut:
+    """
+    Search for pages similar to a given query.
+
+    Args:
+        query (str): The query string to search for.
+        pages (List[Dict[str, Union[int, List[float]]]): A list of pages with their embeddings.
+        top_k (int): The number of similar pages to return.
+
+    Returns:
+        QueryOut: The search results, including the query and a list of similar pages.
+    """
+    EMBEDDINGS_URL = settings.EMBEDDINGS_URL
+    embed_token = settings.EMBEDDINGS_URL_TOKEN
+    EMBEDDINGS_BATCH_SIZE = 5
+
+    async def send_patch(patch_pages):
+        headers = {"Authorization": f"Bearer {embed_token}"}
+        payload = {
+            "input": {
+                "task": "score",
+                "input_data": [query],
+                "documents": patch_pages,
+            }
+        }
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                EMBEDDINGS_URL, json=payload, headers=headers
+            ) as response:
+                if response.status != 200:
+                    raise ValidationError(
+                        "Failed to get embeddings from the embeddings service."
+                    )
+                out = await response.json()
+        return out["output"]["data"]
+
+    # send the embeddings in batches of 5
+    batches = []
+
+    for i in range(0, len(pages), EMBEDDINGS_BATCH_SIZE):
+        batch = pages[i : i + EMBEDDINGS_BATCH_SIZE]
+        batches.append(batch)
+
+    # patches look like this: [{"id": 0, "embeddings": [[0.1, 0.2, 0.3, ...], [0.4, 0.5, 0.6, ...]]}, {"id": 1, "embeddings": [[0.7, 0.8, 0.9, ...], [0.10, 0.11, 0.12, ...]]}]
+    results = []
+    for batch in batches:
+        # output is a list of dictionaries, each dictionary contains the page id, score: [{"id": 0, "score": 0.87}, {"id": 1, "score": 0.65}]
+        output = await send_patch(batch)
+        results.extend(output)
+
+    # now we have all the scores, we need to sort them and return the top k
+    output = sorted(results, key=lambda x: x["score"], reverse=True)[:top_k]
+
+    final_results = []
+    for res in output:
+        page_id = res["id"]
+        score = res["score"]
+        page = await Page.objects.aget(id=page_id)
+        document = page.document
+        collection = document.collection
+        results.append(
+            PageOutQuery(
+                collection_name=collection.name,
+                collection_id=collection.id,
+                collection_metadata=collection.metadata,
+                document_name=document.name,
+                document_id=document.id,
+                document_metadata=document.metadata,
+                page_number=page.page_number,
+                score=score,
+                img_base64=page.img_base64,
+            )
+        )
+
+    return QueryOut(query=query, results=final_results)
+
+
+""" helpers """
+
+
+class FileOut(Schema):
+    img_base64: str
+    page_number: int
+
+
+@router.post(
+    "helpers/file-to-imgbase64", tags=["helpers"], response=List[FileOut], auth=Bearer()
+)
+async def file_to_imgbase64(request, file: UploadedFile = File(...)) -> List[FileOut]:
+    """
+    Upload one file, converts to images and return their base64 encoded strings with 1-indexed page numberss.
+
+    Args:
+        request: The HTTP request object.
+        file UploadedFile): One uploaded file
+
+    Returns:
+        List[FileOut]: A list of FileOut objects containing the base64 encoded strings of the images.
+    """
+    document_data = file.read()
+    document = Document()
+    img_base64 = await document._prep_document(document_data)
+    results = []
+    for i, img in enumerate(img_base64):
+        results.append(FileOut(img_base64=img, page_number=i + 1))
+    return results
+
+
+@router.post("helpers/file-to-base64", tags=["helpers"], auth=Bearer())
+async def file_to_base64(request, file: UploadedFile = File(...)) -> Dict[str, str]:
+    """
+    Upload one file, converts to base64 encoded strings.
+
+    Args:
+        request: The HTTP request object.
+        file UploadedFile): One uploaded file
+
+    Returns:
+    str: base64 encoded string of the file.
+    """
+    document_data = file.read()
+    return {"data": base64.b64encode(document_data).decode()}
+
+
 # Emeddings - send a document or a query, get embeddings back - Example Response {"page_1": [0.1, 0.2, 0.3, ...], "page_2": [0.4, 0.5, 0.6, ...]}

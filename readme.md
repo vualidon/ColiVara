@@ -1,14 +1,14 @@
 ## PaliAPI
 
-An end to end RAG web applcation for Colipali-based RAG system.
+A document retrieval API with ColiPali as the backend.
 
 Components:
 
-1. Embeddings Service
+1. Embeddings Service. Currently running as a seperate serverless function. Repo: [embeddings-service](https://github.com/tjmlabs/colipali-embeddings)
 
-2. Postgres DB with pgvector extension
+2. Postgres DB with pgvector extension for storing embeddings.
 
-3. Create Collection, Upsert, Delete, Search, Update, Delete Collection
+3. REST API for CRUD operations on collections and documents
 
 ### Models:
 
@@ -16,6 +16,7 @@ Components:
 - **Collection**: Represents a collection of documents, owned by a user.
 - **Document**: Each document belongs to a specific collection.
 - **Page**: Each page belongs to a specific document and contains the embeddings.
+- **PageEmbedding**: Represents the embeddings of a page.
 
 ### Endpoints:
 
@@ -24,120 +25,55 @@ Components:
    **Purpose**: Check if the API is running properly.  
    **Response**: `{ "status": "ok" }`
 
+Please check swagger documentation endpoint (v1/docs) for rest of endpoints. Typical flow
 
-# create index (collection, documents, pages with embeddings all in one go)
-# search index (search for pages with embeddings similar to a given query)
-# delete index (delete a collection and all its documents and pages)
-# Emeddings - send a document or a query, get embeddings back
+1. Create empty collection with metadata via Create Collection endpoint
+2. Add documents to the collection with metadata Via Create Document endpoint
+3. Search for documents in the collection via Search endpoint with Query and optional filtering. You will get back top k(3) pages with document and collection details.
 
+There is endpoints for updating and deleting collections and documents as well.
 
-2. **Create Collection**  
-   **Method**: `POST /collections`  
-   **Request Body**: `{ "name": "Research Papers" }`  
-   **Purpose**: Create a new collection for a specific user.  
-   **Response**: `{ "id": 1, "message": "Collection created successfully" }`
+## Roadmap for 1.0 Release
 
-3. **List User's Collections**  
-   **Method**: `GET /collections`  
-   **Purpose**: Retrieve all collections for a specific user.  
-   **Response**:
+1.  Python SDK for the API
+2.  Filter by metadata on collection and document
+3.  Embeddings Endpoint (user responsible for storage and querying - aka I want to use Qdrant as my storage)
+4.  Embeddings service in the docker-compose instead of seperate serverless GPU (aka I want to host this fully on my own GPU server)
+5.  Documentation for the API
+6.  Basic sanity check evals
 
-   ```json
-   {
-     "collections": [
-       { "id": 1, "name": "Research Papers", "metadata": { "key": "value" } },
-       { "id": 2, "name": "Book Summaries", "metadata": { "key": "value" } }
-     ]
-   }
-   ```
+## Wishlist
 
-4. **Get Collection Details**  
-   **Method**: `GET /collections/{collection_id}`  
-   **Purpose**: Retrieve a collection for a specific user.  
-   **Response**:
+1. Typescript SDK for the API
+2. Consistent/reliable Evals
 
-   ```json
-   {
-     "id": 1,
-     "name": "Research Papers",
-     "metadata": { "key": "value" }
-   }
-   ```
+## Getting Started
 
-5. **Update Collection**  
-   **Method**: `PUT /collections/{collection_id}`  
-   **Request Body**: `{ "name": "New Collection Name" }`  
-   **Purpose**: Update a collection's name by its `id` for a specific user.  
-   **Response**: `{ "message": "Collection updated successfully" }`
+1. Clone the repo
+2. Create a .env.dev file in the root directory with the following variables:
 
-6. **Delete Collection**  
-   **Method**: `DELETE /collections/{collection_id}`  
-   **Purpose**: Delete a collection by its `id` for a specific user.  
-   **Response**: `{ "message": "Collection deleted successfully" }`
-
-
-
-7. **Get Document by ID in a Collection**  
-   **Method**: `GET /collections/{collection_id}/documents/{document_id}`  
-   **Purpose**: Retrieve a document from a specific collection by its `id`.  
-   **Response**:
-
-   ```json
-   {
-     "id": 1,
-     "content": "The document text",
-      "metadata": { "key": "value" }
-   }
-   ```
-
-8. **List All Documents in a Collection**  
-   **Method**: `GET /collections/{collection_id}/documents`  
-   **Purpose**: Retrieve a list of all documents in a specific collection.  
-   **Response**:
-
-   ```json
-   {
-     "documents": [
-       { "id": 1, "content": "Document 1 text" },
-       { "id": 2, "content": "Document 2 text" }
-     ]
-   }
-   ```
-
-# bulk upsert with files (C and U) - we create pages with embeddings here
-
-
-9. **Upsert Document to Collection**  
-   **Method**: `POST collections/{collection_id}/documents`  
-   **Request Body**: `{ "content": "The document text" }`  
-   **Purpose**: Upserts a new document to a specific collection.  
-   **Response**: `{ "id": 1, "message": "Document added successfully" }`
-
-10. **Delete Document from a Collection**  
-    **Method**: `DELETE /collections/{collection_id}/documents/{document_id}`  
-    **Purpose**: Delete a document by its `id` from a specific collection.  
-    **Response**: `{ "message": "Document deleted successfully" }`
-
-11. **Query Documents in a Collection**  
-    **Method**: `POST /collections/{collection_id}/query`  
-    **Request Body**: `{ "query": "search text", "top_k": 5 }`  
-    **Purpose**: Takes a query text, generates embeddings, and retrieves the top `k` documents in a specific collection based on the similarity score.  
-
-
-11. **Embeddings Service**  
-    **Method**: `POST /embeddings`  
-    **Request Body**: `{ "texts": ["text1", "text2", ...] }`  
-    **Purpose**: Generate embeddings for a list of texts.  
-    **Response**:
-
-```json
-{
-  "embeddings": [
-    [...],
-    [...],
-    ...
-  ]
-}
+```
+DEBUG=True
+SECRET_KEY="DUMMY123"
+DJANGO_SECURE_SSL_REDIRECT="False"
+DJANGO_SECURE_HSTS_SECONDS=0
+DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS="False"
+DJANGO_SECURE_HSTS_PRELOAD="False"
+DJANGO_SESSION_COOKIE_SECURE="False"
+DJANGO_CSRF_COOKIE_SECURE="False"
+LOCAL=True
+EMBEDDINGS_URL="email me and I will give you the url while we in alpha"
+EMBEDDINGS_URL_TOKEN="email me and I will give you the token while we are in alpha"
 ```
 
----
+3. Run the following commands:
+
+```
+docker-compose up -d --build
+docker-compose exec web python manage.py migrate
+docker-compose exec web python manage.py createsuperuser
+# get the token from the superuser creation
+docker-compose exec web python manage.py shell
+from accounts.models import CustomUser
+user = CustomUser.objects.first().token # save this token somewhere (I will make this easier in the future)
+```
