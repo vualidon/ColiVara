@@ -528,3 +528,22 @@ class PageEmbedding(models.Model):
 
 
 # TO DO: Post save signal on page to get the content via OCR
+
+
+class Query(models.Model):
+    query = models.TextField()
+    collection = models.ForeignKey(
+        Collection, on_delete=models.CASCADE, related_name="queries", null=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return self.query
+
+
+class QueryEmbedding(models.Model):
+    query = models.ForeignKey(
+        Query, on_delete=models.CASCADE, related_name="embeddings"
+    )
+    embedding = VectorField(dimensions=128)

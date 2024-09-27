@@ -1,11 +1,13 @@
-import asyncio
 import base64
+import json
 from typing import Dict, List, Optional, Union
 
 import aiohttp
+from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db.models import Count, Prefetch
+from django.db import connection
+from django.db.models import Count
 from django.db.utils import IntegrityError
 from django.http.request import HttpRequest
 from django.shortcuts import aget_object_or_404
@@ -18,7 +20,7 @@ from typing_extensions import Self
 
 from accounts.models import CustomUser
 
-from .models import Collection, Document, Page
+from .models import Collection, Document, Query, QueryEmbedding
 
 router = Router()
 
@@ -549,7 +551,8 @@ class PageOutQuery(Schema):
     document_id: int
     document_metadata: Optional[dict] = {}
     page_number: int
-    score: float
+    raw_score: float
+    normalized_score: float
     img_base64: str
 
 
@@ -576,58 +579,111 @@ async def search(request: Request, payload: QueryIn) -> QueryOut:
     Raises:
         HttpError: If the collection does not exist or the query is invalid.
     """
-    # collection id is optional, so if not provided, search across all the user collections
-    if payload.collection_id:
-        collection = await aget_object_or_404(Collection, id=payload.collection_id)
-        documents_qs = Document.objects.filter(collection=collection)
-    else:
-        documents_qs = Document.objects.filter(collection__owner=request.auth)
-
-    prefetch_pages = Prefetch(
-        "pages", queryset=Page.objects.prefetch_related("embeddings")
+    query_embeddings = await get_query_embeddings(payload.query)
+    query_length = len(query_embeddings)
+    query = await Query.objects.acreate(
+        query=payload.query,
+        collection_id=payload.collection_id if payload.collection_id else None,
     )
-    documents_qs = documents_qs.prefetch_related(prefetch_pages)
-    documents = documents_qs.all()
-    pages: List[Dict[str, Union[int, List[float]]]] = []
-    async for document in documents:
-        async for page in document.pages.all():
-            # Extract all embeddings for the current page
-            embeddings = [
-                embedding.embedding.tolist() for embedding in page.embeddings.all()
-            ]
-            pages.append({"id": page.id, "embeddings": embeddings})
+
+    bulk_query_embeddings = [
+        QueryEmbedding(query=query, embedding=embedding)
+        for embedding in query_embeddings
+    ]
+    await QueryEmbedding.objects.abulk_create(bulk_query_embeddings)
+
+    # Prepare the SQL query
+    sql = """
+    WITH query_embeddings AS (
+        SELECT embedding
+        FROM api_queryembedding
+        WHERE query_id = %s
+    )
+    SELECT 
+        p.id,
+        p.page_number,
+        p.img_base64,
+        d.id AS document_id,
+        d.name AS document_name,
+        d.metadata AS document_metadata,
+        c.id AS collection_id,
+        c.name AS collection_name,
+        c.metadata AS collection_metadata,
+        max_sim(ARRAY_AGG(pe.embedding ORDER BY pe.id), ARRAY(SELECT embedding FROM query_embeddings)) AS max_sim
+    FROM api_page p
+    JOIN api_document d ON p.document_id = d.id
+    JOIN api_collection c ON d.collection_id = c.id
+    JOIN api_pageembedding pe ON p.id = pe.page_id
+    WHERE {where_clause}
+    GROUP BY p.id, p.page_number, p.img_base64, d.id, d.name, d.metadata, c.id, c.name, c.metadata
+    ORDER BY max_sim DESC
+    LIMIT %s
+    """
+
+    # Adjust the where clause based on whether a collection_id is provided
+    if payload.collection_id:
+        where_clause = "d.collection_id = %s"
+        query_params = [query.id, payload.collection_id]
+    else:
+        where_clause = (
+            "d.collection_id IN (SELECT id FROM api_collection WHERE owner_id = %s)"
+        )
+        query_params = [query.id, request.auth.id]
+
+    sql = sql.format(where_clause=where_clause)
+
     top_k = payload.top_k or 3
-    results = await search_index(payload.query, pages, top_k)
-    return results
+    query_params.append(top_k)
+
+    @sync_to_async
+    def execute_query():
+        with connection.cursor() as cursor:
+            cursor.execute(sql, query_params)
+            columns = [col[0] for col in cursor.description]
+            return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+    results = await execute_query()
+    # Normalization
+    extra_tokens = 12
+    normalization_factor = query_length + extra_tokens
+
+    # Format the results
+    formatted_results = [
+        PageOutQuery(
+            collection_name=row["collection_name"],
+            collection_id=row["collection_id"],
+            collection_metadata=(
+                json.loads(row["collection_metadata"])
+                if row["collection_metadata"]
+                else {}
+            ),
+            document_name=row["document_name"],
+            document_id=row["document_id"],
+            document_metadata=(
+                json.loads(row["document_metadata"]) if row["document_metadata"] else {}
+            ),
+            page_number=row["page_number"],
+            raw_score=row["max_sim"],
+            normalized_score=row["max_sim"] / normalization_factor,
+            img_base64="",  # row["img_base64"],
+        )
+        for row in results
+    ]
+
+    return QueryOut(query=payload.query, results=formatted_results)
 
 
-async def search_index(
-    query: str, pages: List[Dict[str, Union[int, List[float]]]], top_k: int = 3
-) -> QueryOut:
-    """
-    Search for pages similar to a given query.
-
-    Args:
-        query (str): The query string to search for.
-        pages (List[Dict[str, Union[int, List[float]]]): A list of pages with their embeddings.
-        top_k (int): The number of similar pages to return.
-
-    Returns:
-        QueryOut: The search results, including the query and a list of similar pages.
-    """
+async def get_query_embeddings(query: str) -> List:
     EMBEDDINGS_URL = settings.EMBEDDINGS_URL
     embed_token = settings.EMBEDDINGS_URL_TOKEN
-    EMBEDDINGS_BATCH_SIZE = 5
-
-    async def send_patch(session, patch_pages):
-        headers = {"Authorization": f"Bearer {embed_token}"}
-        payload = {
-            "input": {
-                "task": "score",
-                "input_data": [query],
-                "documents": patch_pages,
-            }
+    headers = {"Authorization": f"Bearer {embed_token}"}
+    payload = {
+        "input": {
+            "task": "query",
+            "input_data": [query],
         }
+    }
+    async with aiohttp.ClientSession() as session:
         async with session.post(
             EMBEDDINGS_URL, json=payload, headers=headers
         ) as response:
@@ -636,61 +692,10 @@ async def search_index(
                     "Failed to get embeddings from the embeddings service."
                 )
             out = await response.json()
-            return out["output"]["data"]
-
-    # send the embeddings in batches of 5
-    batches = [
-        pages[i : i + EMBEDDINGS_BATCH_SIZE]
-        for i in range(0, len(pages), EMBEDDINGS_BATCH_SIZE)
-    ]
-
-    async with aiohttp.ClientSession() as session:
-        # this is ugly looking, but we need to send the patches in parallel
-        results = await asyncio.gather(
-            *[send_patch(session, batch) for batch in batches]
-        )
-
-    # Flatten the results
-    flat_results = [item for sublist in results for item in sublist]
-
-    # now we have all the scores, we need to sort them and return the top k
-    output = sorted(flat_results, key=lambda x: x["score"], reverse=True)[:top_k]
-
-    # Extract all page_ids from the top results
-    page_ids = [res["id"] for res in output]
-    # Batch fetch all Page objects with related Document and Collection in a single query
-    pages_queryset = Page.objects.filter(id__in=page_ids).select_related(
-        "document__collection"
-    )
-    pages_fetched = pages_queryset.all()
-    # Create a mapping from page_id to Page object for quick access
-    page_map = {}
-    async for page in pages_fetched:
-        page_map[page.id] = page
-
-    final_results: List[PageOutQuery] = []
-    for res in output:
-        page_id = res["id"]
-        score = res["score"]
-        page = page_map.get(page_id)  # type: ignore
-        document = page.document
-        collection = document.collection
-
-        final_results.append(
-            PageOutQuery(
-                collection_name=collection.name,
-                collection_id=collection.id,
-                collection_metadata=collection.metadata,
-                document_name=document.name,
-                document_id=document.id,
-                document_metadata=document.metadata,
-                page_number=page.page_number,
-                score=score,
-                img_base64=page.img_base64,
-            )
-        )
-
-    return QueryOut(query=query, results=final_results)
+            # returning  a dynamic array of embeddings, each of which is a list of 128 floats
+            # example: [[0.1, 0.2, 0.3, ...], [0.4, 0.5, 0.6, ...]]
+            return out["output"]["data"][0]["embedding"]
+    return []
 
 
 """ helpers """
