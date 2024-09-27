@@ -149,25 +149,36 @@ class Document(models.Model):
                 for batch_result in embedding_results
                 for embedding in batch_result
             ]
-            bulk_create_pages = []
+
             for i, embedding_obj in enumerate(all_embeddings):
                 # we want to assert that the embeddings is a list of a list of 128 floats
+                # each page = 1 embedding, an
+                # exampple all_embeddings = [
+                #     {
+                #         "embedding": [[0.1, 0.2, ..., 0.128], [0.1, 0.2, ...]],  # List of 1030 members, each a list of 128 floats
+                #         "index": 0,
+                #         "object": "embedding"
+                #     },
+                #     ...
+                # ]
                 assert (
                     isinstance(embedding_obj["embedding"], list)
                     and isinstance(embedding_obj["embedding"][0], list)
                     and len(embedding_obj["embedding"][0]) == 128
                 ), "Embedding is not a list of a list of 128 floats"
 
+                # can we create a page and pageembedding in one go?
                 page = Page(
                     document=self,
                     page_number=i + 1,
                     img_base64=base64_images[i],
                 )
                 await page.asave()
-                for embedding in embedding_obj["embedding"]:
-                    embedding = PageEmbedding(page=page, embedding=embedding)
-                    bulk_create_pages.append(embedding)
-            await PageEmbedding.objects.abulk_create(bulk_create_pages)
+                bulk_create_embeddings = [
+                    PageEmbedding(page=page, embedding=embedding)
+                    for embedding in embedding_obj["embedding"]
+                ]
+                await PageEmbedding.objects.abulk_create(bulk_create_embeddings)
 
         except Exception as e:
             # If there's an error, delete the document and pages
