@@ -16,7 +16,7 @@ from django.db import models
 from django.db.models import JSONField
 from django_stubs_ext.db.models import TypedModelMeta
 from pdf2image import convert_from_bytes
-from pgvector.django import VectorField
+from pgvector.django import HalfVectorField
 
 from accounts.models import CustomUser
 
@@ -524,7 +524,7 @@ class Page(models.Model):
 
 class PageEmbedding(models.Model):
     page = models.ForeignKey(Page, on_delete=models.CASCADE, related_name="embeddings")
-    embedding = VectorField(dimensions=128)
+    embedding = HalfVectorField(dimensions=128)
 
 
 # TO DO: Post save signal on page to get the content via OCR
@@ -546,4 +546,4 @@ class QueryEmbedding(models.Model):
     query = models.ForeignKey(
         Query, on_delete=models.CASCADE, related_name="embeddings"
     )
-    embedding = VectorField(dimensions=128)
+    embedding = HalfVectorField(dimensions=128, null=True)
