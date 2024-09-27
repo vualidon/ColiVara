@@ -1,3 +1,4 @@
+import asyncio
 import base64
 from typing import Dict, List, Optional, Union
 
@@ -618,7 +619,7 @@ async def search_index(
     embed_token = settings.EMBEDDINGS_URL_TOKEN
     EMBEDDINGS_BATCH_SIZE = 5
 
-    async def send_patch(patch_pages):
+    async def send_patch(session, patch_pages):
         headers = {"Authorization": f"Bearer {embed_token}"}
         payload = {
             "input": {
@@ -627,33 +628,34 @@ async def search_index(
                 "documents": patch_pages,
             }
         }
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                EMBEDDINGS_URL, json=payload, headers=headers
-            ) as response:
-                if response.status != 200:
-                    raise ValidationError(
-                        "Failed to get embeddings from the embeddings service."
-                    )
-                out = await response.json()
-        return out["output"]["data"]
+        async with session.post(
+            EMBEDDINGS_URL, json=payload, headers=headers
+        ) as response:
+            if response.status != 200:
+                raise ValidationError(
+                    "Failed to get embeddings from the embeddings service."
+                )
+            out = await response.json()
+            return out["output"]["data"]
 
     # send the embeddings in batches of 5
-    batches = []
+    batches = [
+        pages[i : i + EMBEDDINGS_BATCH_SIZE]
+        for i in range(0, len(pages), EMBEDDINGS_BATCH_SIZE)
+    ]
 
-    for i in range(0, len(pages), EMBEDDINGS_BATCH_SIZE):
-        batch = pages[i : i + EMBEDDINGS_BATCH_SIZE]
-        batches.append(batch)
+    async with aiohttp.ClientSession() as session:
+        # this is ugly looking, but we need to send the patches in parallel
+        results = await asyncio.gather(
+            *[send_patch(session, batch) for batch in batches]
+        )
 
-    # patches look like this: [{"id": 0, "embeddings": [[0.1, 0.2, 0.3, ...], [0.4, 0.5, 0.6, ...]]}, {"id": 1, "embeddings": [[0.7, 0.8, 0.9, ...], [0.10, 0.11, 0.12, ...]]}]
-    results = []
-    for batch in batches:
-        # output is a list of dictionaries, each dictionary contains the page id, score: [{"id": 0, "score": 0.87}, {"id": 1, "score": 0.65}]
-        output = await send_patch(batch)
-        results.extend(output)
+    # Flatten the results
+    flat_results = [item for sublist in results for item in sublist]
 
     # now we have all the scores, we need to sort them and return the top k
-    output = sorted(results, key=lambda x: x["score"], reverse=True)[:top_k]
+    output = sorted(flat_results, key=lambda x: x["score"], reverse=True)[:top_k]
+
     # Extract all page_ids from the top results
     page_ids = [res["id"] for res in output]
     # Batch fetch all Page objects with related Document and Collection in a single query

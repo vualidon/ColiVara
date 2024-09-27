@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import mimetypes
 import os
@@ -5,7 +6,7 @@ import re
 import urllib.parse
 from binascii import Error as BinasciiError
 from io import BytesIO
-from typing import List
+from typing import Any, Dict, List
 
 import aiohttp
 import magic
@@ -64,89 +65,109 @@ class Document(models.Model):
 
     async def embed_document(self) -> None:
         """
-        this method takes a list of base64 images (each image representing a page in a document), sends them to the embeddings service,
-        then stores in the Page model with the page number, content (WIP), and embeddings.
+        Process a document by embedding its pages and storing the results.
+
+        This method takes a list of base64 images (each image representing a page in a document),
+        sends them to an embeddings service, then stores the results in the Page and PageEmbedding models.
+
+        The method performs the following steps:
+        1. Prepares the document by converting pages to base64 images.
+        2. Splits the images into batches.
+        3. Sends batches to the embeddings service concurrently.
+        4. Saves the document and its pages with their corresponding embeddings.
+
+        Raises:
+            ValidationError: If there's an error in processing or saving the document and its pages.
+
+        Note:
+            - The method uses the EMBEDDINGS_URL and EMBEDDINGS_URL_TOKEN from settings.
+            - If an error occurs during processing, the document and all its pages are deleted.
         """
         # Constants
-        # this endpoint takes a list of base64 images and returns a list of embeddings
         EMBEDDINGS_URL = settings.EMBEDDINGS_URL
         EMBEDDINGS_BATCH_SIZE = 5
 
         # Helper function to send a batch of images to the embeddings service
-        async def send_batch(images):
+        async def send_batch(
+            session: aiohttp.ClientSession, images: List[str]
+        ) -> List[Dict[str, Any]]:
+            """
+            Send a batch of images to the embeddings service and return the embeddings.
+
+            Args:
+                session (aiohttp.ClientSession): The aiohttp session to use for the request.
+                images (List[str]): A list of base64-encoded images.
+
+            Returns:
+                List[Dict[str, Any]]: A list of embedding objects, each containing 'embedding', 'index', and 'object' keys.
+
+            Raises:
+                ValidationError: If the embeddings service returns a non-200 status code.
+
+            Example of returned data:
+                [
+                    {
+                        "embedding": [[0.1, 0.2, ..., 0.128]],  # List of 128 floats
+                        "index": 0,
+                        "object": "embedding"
+                    },
+                    ...
+                ]
+            """
             payload = {"input": {"task": "image", "input_data": images}}
-            token = settings.EMBEDDINGS_URL_TOKEN
-            headers = {"Authorization": f"Bearer {token}"}
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    EMBEDDINGS_URL, json=payload, headers=headers
-                ) as response:
-                    if response.status != 200:
-                        raise ValidationError(
-                            "Failed to get embeddings from the embeddings service."
-                        )
-                    out = await response.json()
+            headers = {"Authorization": f"Bearer {settings.EMBEDDINGS_URL_TOKEN}"}
+            async with session.post(
+                EMBEDDINGS_URL, json=payload, headers=headers
+            ) as response:
+                if response.status != 200:
+                    raise ValidationError(
+                        "Failed to get embeddings from the embeddings service."
+                    )
+                out = await response.json()
             return out["output"]["data"]
 
         base64_images = await self._prep_document()
         # Split the images into batches
-        batches = []
-        for i in range(0, len(base64_images), EMBEDDINGS_BATCH_SIZE):
-            batch = base64_images[i : i + EMBEDDINGS_BATCH_SIZE]
-            batches.append(batch)
-        """
-        batches look like this: [[img1, img2, img3, img4, img5], [img6, img7, img8, img9, img10], ...]
-        sending a patch to embed service looks something like this:
-        in: {"input": {"task": "image", "input_data": [img1, img2, img3, img4, img5]}}
-        out: {
-            "delayTime": 13497,
-            "executionTime": 3503,
-            "id": "sync-2cedb24f-8782-4a9c-9729-de3574c93022-u1",
-            "output": {
-                "data": [ {embedding_obj1}, {embedding_obj2}, {embedding_obj3}, {embedding_obj4}, {embedding_obj5} ]
-            },
-            "model": "vidore/colpal-v1.2",
-            "object": "list",
-            "usage": {
-                "prompt_tokens": 2060,
-                "total_tokens": 2060
-            }
-        },
-        "status": "COMPLETED",
-        "workerId": "a0jvy9fsgzlz7e"
-        }
-        # Each embedding object looks likes this:
-        {
-            "embedding": [0.1, 0.2, 0.3, ...],
-            "index": 0,
-            "object": "embedding",
-        }
-        """
+        batches = [
+            base64_images[i : i + EMBEDDINGS_BATCH_SIZE]
+            for i in range(0, len(base64_images), EMBEDDINGS_BATCH_SIZE)
+        ]
+
         try:
             # we save the document first, then save the pages
             await self.asave()
 
-            for i, batch in enumerate(batches):
-                embeddings_objects = await send_batch(batch)
-                for idx, embedding_obj in enumerate(embeddings_objects):
-                    # we want to assert that the embeddings is a list of a list of 128 floats
-                    assert (
-                        isinstance(embedding_obj["embedding"], list)
-                        and isinstance(embedding_obj["embedding"][0], list)
-                        and len(embedding_obj["embedding"][0]) == 128
-                    ), "Embedding is not a list of a list of 128 floats"
+            async with aiohttp.ClientSession() as session:
+                # Use gather to send all batches concurrently
+                embedding_results = await asyncio.gather(
+                    *[send_batch(session, batch) for batch in batches]
+                )
 
-                    # we want the true page number. since we are doing inner loop, we need to add the index of the batch
+            # Flatten the results
+            all_embeddings = [
+                embedding
+                for batch_result in embedding_results
+                for embedding in batch_result
+            ]
+            bulk_create_pages = []
+            for i, embedding_obj in enumerate(all_embeddings):
+                # we want to assert that the embeddings is a list of a list of 128 floats
+                assert (
+                    isinstance(embedding_obj["embedding"], list)
+                    and isinstance(embedding_obj["embedding"][0], list)
+                    and len(embedding_obj["embedding"][0]) == 128
+                ), "Embedding is not a list of a list of 128 floats"
 
-                    page = Page(
-                        document=self,
-                        page_number=i * EMBEDDINGS_BATCH_SIZE + idx + 1,
-                        img_base64=batch[embedding_obj["index"]],
-                    )
-                    await page.asave()
-                    for embedding in embedding_obj["embedding"]:
-                        embedding = PageEmbedding(page=page, embedding=embedding)
-                        await embedding.asave()
+                page = Page(
+                    document=self,
+                    page_number=i + 1,
+                    img_base64=base64_images[i],
+                )
+                await page.asave()
+                for embedding in embedding_obj["embedding"]:
+                    embedding = PageEmbedding(page=page, embedding=embedding)
+                    bulk_create_pages.append(embedding)
+            await PageEmbedding.objects.abulk_create(bulk_create_pages)
 
         except Exception as e:
             # If there's an error, delete the document and pages
