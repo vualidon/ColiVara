@@ -13,7 +13,7 @@ import magic
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.db.models import JSONField
+from django.db.models import FloatField, Func, JSONField
 from django_stubs_ext.db.models import TypedModelMeta
 from pdf2image import convert_from_bytes
 from pgvector.django import HalfVectorField
@@ -530,20 +530,6 @@ class PageEmbedding(models.Model):
 # TO DO: Post save signal on page to get the content via OCR
 
 
-class Query(models.Model):
-    query = models.TextField()
-    collection = models.ForeignKey(
-        Collection, on_delete=models.CASCADE, related_name="queries", null=True
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self) -> str:
-        return self.query
-
-
-class QueryEmbedding(models.Model):
-    query = models.ForeignKey(
-        Query, on_delete=models.CASCADE, related_name="embeddings"
-    )
-    embedding = HalfVectorField(dimensions=128, null=True)
+class MaxSim(Func):
+    function = "max_sim"
+    output_field = FloatField()
