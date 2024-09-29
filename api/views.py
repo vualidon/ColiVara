@@ -1,12 +1,10 @@
 import base64
-import json
 from typing import Dict, List, Optional, Union
 
 import aiohttp
-from asgiref.sync import sync_to_async
 from django.conf import settings
+from django.contrib.postgres.aggregates import ArrayAgg
 from django.core.exceptions import ValidationError
-from django.db import connection
 from django.db.models import Count
 from django.db.utils import IntegrityError
 from django.http.request import HttpRequest
@@ -15,12 +13,13 @@ from ninja import File, Router, Schema
 from ninja.errors import HttpError
 from ninja.files import UploadedFile
 from ninja.security import HttpBearer
+from pgvector.utils import HalfVector
 from pydantic import Field, model_validator
 from typing_extensions import Self
 
 from accounts.models import CustomUser
 
-from .models import Collection, Document, Query, QueryEmbedding
+from .models import Collection, Document, MaxSim, Page
 
 router = Router()
 
@@ -580,69 +579,41 @@ async def search(request: Request, payload: QueryIn) -> QueryOut:
         HttpError: If the collection does not exist or the query is invalid.
     """
     query_embeddings = await get_query_embeddings(payload.query)
-    query_length = len(query_embeddings)
-    query = await Query.objects.acreate(
-        query=payload.query,
-        collection_id=payload.collection_id if payload.collection_id else None,
-    )
 
-    bulk_query_embeddings = [
-        QueryEmbedding(query=query, embedding=embedding)
-        for embedding in query_embeddings
+    query_length = len(query_embeddings)  # we need this for normalization
+
+    # we want to cast the embeddings to halfvec
+    casted_query_embeddings = [
+        HalfVector(embedding).to_text() for embedding in query_embeddings
     ]
-    await QueryEmbedding.objects.abulk_create(bulk_query_embeddings)
 
-    # Prepare the SQL query
-    sql = """
-    WITH query_embeddings AS (
-        SELECT embedding
-        FROM api_queryembedding
-        WHERE query_id = %s
-    )
-    SELECT 
-        p.id,
-        p.page_number,
-        p.img_base64,
-        d.id AS document_id,
-        d.name AS document_name,
-        d.metadata AS document_metadata,
-        c.id AS collection_id,
-        c.name AS collection_name,
-        c.metadata AS collection_metadata,
-        max_sim(ARRAY_AGG(pe.embedding ORDER BY pe.id), ARRAY(SELECT embedding FROM query_embeddings)) AS max_sim
-    FROM api_page p
-    JOIN api_document d ON p.document_id = d.id
-    JOIN api_collection c ON d.collection_id = c.id
-    JOIN api_pageembedding pe ON p.id = pe.page_id
-    WHERE {where_clause}
-    GROUP BY p.id, p.page_number, p.img_base64, d.id, d.name, d.metadata, c.id, c.name, c.metadata
-    ORDER BY max_sim DESC
-    LIMIT %s
-    """
-
-    # Adjust the where clause based on whether a collection_id is provided
+    # building the query: 1. get all pages in collection/collection owner
+    base_query = Page.objects.select_related("document__collection")
     if payload.collection_id:
-        where_clause = "d.collection_id = %s"
-        query_params = [query.id, payload.collection_id]
+        base_query = base_query.filter(document__collection_id=payload.collection_id)
     else:
-        where_clause = (
-            "d.collection_id IN (SELECT id FROM api_collection WHERE owner_id = %s)"
-        )
-        query_params = [query.id, request.auth.id]
+        base_query = base_query.filter(document__collection__owner=request.auth)
 
-    sql = sql.format(where_clause=where_clause)
-
-    top_k = payload.top_k or 3
-    query_params.append(top_k)
-
-    @sync_to_async
-    def execute_query():
-        with connection.cursor() as cursor:
-            cursor.execute(sql, query_params)
-            columns = [col[0] for col in cursor.description]
-            return [dict(zip(columns, row)) for row in cursor.fetchall()]
-
-    results = await execute_query()
+    # 2. annotate the query with the max sim score
+    # maxsim needs 2 arrays of embeddings, one for the pages and one for the query
+    pages_query = (
+        base_query.annotate(page_embeddings=ArrayAgg("embeddings__embedding"))
+        .annotate(max_sim=MaxSim("page_embeddings", casted_query_embeddings))
+        .order_by("-max_sim")[: payload.top_k or 3]
+    )
+    # 3. execute the query
+    results = pages_query.values(
+        "id",
+        "page_number",
+        "img_base64",
+        "document__id",
+        "document__name",
+        "document__metadata",
+        "document__collection__id",
+        "document__collection__name",
+        "document__collection__metadata",
+        "max_sim",
+    )
     # Normalization
     extra_tokens = 12
     normalization_factor = query_length + extra_tokens
@@ -650,26 +621,25 @@ async def search(request: Request, payload: QueryIn) -> QueryOut:
     # Format the results
     formatted_results = [
         PageOutQuery(
-            collection_name=row["collection_name"],
-            collection_id=row["collection_id"],
+            collection_name=row["document__collection__name"],
+            collection_id=row["document__collection__id"],
             collection_metadata=(
-                json.loads(row["collection_metadata"])
-                if row["collection_metadata"]
+                row["document__collection__metadata"]
+                if row["document__collection__metadata"]
                 else {}
             ),
-            document_name=row["document_name"],
-            document_id=row["document_id"],
+            document_name=row["document__name"],
+            document_id=row["document__id"],
             document_metadata=(
-                json.loads(row["document_metadata"]) if row["document_metadata"] else {}
+                row["document__metadata"] if row["document__metadata"] else {}
             ),
             page_number=row["page_number"],
             raw_score=row["max_sim"],
             normalized_score=row["max_sim"] / normalization_factor,
-            img_base64="",  # row["img_base64"],
+            img_base64=row["img_base64"],
         )
-        for row in results
+        async for row in results
     ]
-
     return QueryOut(query=payload.query, results=formatted_results)
 
 
