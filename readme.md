@@ -49,16 +49,9 @@ You can import an openAPI spec (for example for Postman) from the swagger docume
 1. Clone the repo
 2. Create a .env.dev file in the root directory with the following variables:
 
+(Note: bringing the embeddings service in the docker-compose is a work in progress. Once that is done, the EMBEDDINGS_URL and EMBEDDINGS_URL_TOKEN will not be needed)
+
 ```
-DEBUG=True
-SECRET_KEY="DUMMY123"
-DJANGO_SECURE_SSL_REDIRECT="False"
-DJANGO_SECURE_HSTS_SECONDS=0
-DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS="False"
-DJANGO_SECURE_HSTS_PRELOAD="False"
-DJANGO_SESSION_COOKIE_SECURE="False"
-DJANGO_CSRF_COOKIE_SECURE="False"
-LOCAL=True
 EMBEDDINGS_URL="email me and I will give you the url while we in alpha"
 EMBEDDINGS_URL_TOKEN="email me and I will give you the token while we are in alpha"
 ```

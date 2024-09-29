@@ -1,3 +1,5 @@
+""" WARNING: The setting defaults are for development only. Change them for production via .env file. """
+
 from pathlib import Path
 
 from environs import Env
@@ -12,13 +14,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
-
-SECRET_KEY = env("SECRET_KEY")
+# change in production
+SECRET_KEY = env("SECRET_KEY", default="django-insecure-dummy-key")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = env.bool("DEBUG", default=False)
-LOCAL = env.bool("LOCAL", default=False)
+DEBUG = env.bool("DEBUG", default=True)
+LOCAL = env.bool("LOCAL", default=True)
 
+# change in production: example: [".example.com"]
 ALLOWED_HOSTS = ["*"]
 
 
@@ -44,16 +47,24 @@ INSTALLED_APPS = [
     "api",
 ]
 
-# production
-SECURE_SSL_REDIRECT = env.bool("DJANGO_SECURE_SSL_REDIRECT", default=True)
-SECURE_HSTS_SECONDS = env.int("DJANGO_SECURE_HSTS_SECONDS", default=2592000)  # 30 days
+# Change in production
+SECURE_SSL_REDIRECT = env.bool(
+    "DJANGO_SECURE_SSL_REDIRECT", default=False
+)  # prod: True
+SECURE_HSTS_SECONDS = env.int(
+    "DJANGO_SECURE_HSTS_SECONDS", default=0
+)  # prod: 2592000 (30 days)
 SECURE_HSTS_INCLUDE_SUBDOMAINS = env.bool(
-    "DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS", default=True
-)
-SECURE_HSTS_PRELOAD = env.bool("DJANGO_SECURE_HSTS_PRELOAD", default=True)
-SESSION_COOKIE_SECURE = env.bool("DJANGO_SESSION_COOKIE_SECURE", default=True)
-CSRF_COOKIE_SECURE = env.bool("DJANGO_CSRF_COOKIE_SECURE", default=True)
-SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    "DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS", default=False
+)  # prod: True
+SECURE_HSTS_PRELOAD = env.bool(
+    "DJANGO_SECURE_HSTS_PRELOAD", default=False
+)  # prod: True
+SESSION_COOKIE_SECURE = env.bool(
+    "DJANGO_SESSION_COOKIE_SECURE", default=False
+)  # prod: True
+CSRF_COOKIE_SECURE = env.bool("DJANGO_CSRF_COOKIE_SECURE", default=False)  # prod: True
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")  # same for prod
 
 
 MIDDLEWARE = [
@@ -152,18 +163,22 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Email settings
 
-EMAIL_CONSOLE = env.bool("EMAIL_CONSOLE", default=True)
+EMAIL_CONSOLE = env.bool("EMAIL_CONSOLE", default=True)  # prod: False
 
 if EMAIL_CONSOLE:
     EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 else:
     EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-    EMAIL_HOST = env("EMAIL_HOST", default="smtp.gmail.com")
+    EMAIL_HOST = env("EMAIL_HOST", default="smtp.gmail.com")  # prod: SMTP server
     EMAIL_PORT = 587
-    EMAIL_HOST_USER = env("EMAIL_USER", default="dummy user")
-    EMAIL_HOST_PASSWORD = env("EMAIL_PASSWORD", default="dummy password")
+    EMAIL_HOST_USER = env("EMAIL_USER", default="dummy user")  # prod: SMTP username
+    EMAIL_HOST_PASSWORD = env(
+        "EMAIL_PASSWORD", default="dummy password"
+    )  # prod: SMTP password
     EMAIL_USE_TLS = True
-DEFAULT_EMAIL_FROM = env("DEFAULT_EMAIL_FROM", default="dummy-email@example.com")
+DEFAULT_EMAIL_FROM = env(
+    "DEFAULT_EMAIL_FROM", default="dummy-email@example.com"
+)  # prod: SMTP email
 
 
 # allauth settings
@@ -172,7 +187,7 @@ AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",
     "allauth.account.auth_backends.AuthenticationBackend",
 ]
-LOGIN_REDIRECT_URL = "home"  # "dashboard"
+LOGIN_REDIRECT_URL = "home"
 LOGOUT_REDIRECT_URL = "home"
 
 ACCOUNT_AUTHENTICATION_METHOD = "email"
