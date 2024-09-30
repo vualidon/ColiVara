@@ -25,9 +25,23 @@ services:
     environment:
       - "POSTGRES_HOST_AUTH_METHOD=trust"
 
-  # WIP
-  # embeddings:
-    #image: jonathanadly/colipali-embeddings:9.25.2024
+
+  embeddings:
+    build: ./embedding
+    command: uvicorn handler:app --host 0.0.0.0 --port 8000 --reload
+    
+    
+    # uncomment the following lines to deploy on GPU
+    # make sure to install the nvidia-container-toolkit on your host machine
+
+    #deploy:
+      #resources:
+        #reservations:
+          #devices:
+            #- driver: nvidia
+              #count: 1 or all
+              #capabilities: [gpu]
+
     
 volumes:
   postgres_data:
