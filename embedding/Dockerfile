@@ -38,4 +38,10 @@ RUN uv pip sync requirements.txt --no-cache-dir --compile-bytecode
 
 
 # Add src files to the image
-ADD src .
+COPY src .
+
+EXPOSE 8000
+
+# Run the application
+CMD ["uvicorn", "handler:app", "--host", "0.0.0.0", "--port", "8000"]
+
