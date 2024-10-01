@@ -1,4 +1,4 @@
-""" WARNING: The setting defaults are for development only. Change them for production via .env file. """
+"""WARNING: The setting defaults are for development only. Change them for production via .env file."""
 
 from pathlib import Path
 
@@ -223,5 +223,5 @@ SOCIALACCOUNT_LOGIN_ON_GET = True
 
 
 # EMEDDING Service
-EMBEDDINGS_URL = env("EMBEDDINGS_URL", default="http://embeddings:8000/run")
-EMBEDDINGS_URL_TOKEN = env("EMBEDDINGS_URL_TOKEN", default=None)
+EMBEDDINGS_URL = env("EMBEDDINGS_URL")
+EMBEDDINGS_URL_TOKEN = env("EMBEDDINGS_URL_TOKEN")

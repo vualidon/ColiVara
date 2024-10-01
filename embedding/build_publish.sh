@@ -1,12 +1,12 @@
 #!/bin/bash
 
 # Usage:
-# ./build_publish.sh local  # For local build
-# ./build_publish.sh cloud  # For cloud build
+# ./embedding/build_publish.sh local  # For local build
+# ./embedding/build_publish.sh cloud  # For cloud build
 
 # Set these variables
-DOCKER_USERNAME="tjmlabs"
-IMAGE_NAME="paliembed"
+DOCKER_USERNAME="jonathanadly"
+IMAGE_NAME="colipali-embeddings"
 VERSION=$(date +'%Y%m%d') # version is today's date, example: 20210101
 
 # Determine version suffix and Dockerfile based on argument

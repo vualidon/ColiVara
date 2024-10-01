@@ -1,6 +1,7 @@
 import base64
 from io import BytesIO
-from typing import List, Dict, Any, Tuple
+from typing import Any, Dict, List, Tuple
+
 import runpod
 import torch
 from colpali_engine.models import ColPali, ColPaliProcessor

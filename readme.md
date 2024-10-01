@@ -4,11 +4,10 @@ A document retrieval API with ColiPali as the backend.
 
 Components:
 
-1. Embeddings Service. Currently running as a seperate serverless function. Repo: [embeddings-service](https://github.com/tjmlabs/colipali-embeddings) - plan is to move this to the same docker-compose as the API as an optional service. (you need a GPU for this)
-
-2. Postgres DB with pgvector extension for storing embeddings.
-
-3. REST API for CRUD operations on collections and documents
+1. Postgres DB with pgvector extension for storing embeddings.
+2. REST API for CRUD operations on collections and documents
+3. Embeddings Service. This needs a GPU with at least 8gb VRAM. The code is under `embeddings` directory and is optimized for a serverless GPU workload.
+   > You can run the embedding service on your own GPU via `the docker-compose-local.yml` with all the other services (in a VPS or locally) - however, it is not comprehensively tested and is not recommended for production.
 
 ### Models:
 
@@ -35,9 +34,8 @@ You can import an openAPI spec (for example for Postman) from the swagger docume
 1.  Python SDK for the API
 2.  Filter by metadata on collection and document
 3.  Embeddings Endpoint (user responsible for storage and querying - aka I want to use Qdrant as my storage)
-4.  Embeddings service in the docker-compose instead of seperate serverless GPU (aka I want to host this fully on my own GPU server)
-5.  Documentation for the API
-6.  Basic sanity check evals
+4.  Documentation for the API
+5.  Basic sanity check evals
 
 ## Wishlist
 
@@ -49,11 +47,11 @@ You can import an openAPI spec (for example for Postman) from the swagger docume
 1. Clone the repo
 2. Create a .env.dev file in the root directory with the following variables:
 
-(Note: bringing the embeddings service in the docker-compose is a work in progress. Once that is done, the EMBEDDINGS_URL and EMBEDDINGS_URL_TOKEN will not be needed)
+(Note: a guide on how to host the Embeddings Service will be provided in the future)
 
 ```
-EMBEDDINGS_URL="email me and I will give you the url while we in alpha"
-EMBEDDINGS_URL_TOKEN="email me and I will give you the token while we are in alpha"
+EMBEDDINGS_URL="the serverless embeddings service url"
+EMBEDDINGS_URL_TOKEN="the serverless embeddings service token"
 ```
 
 3. Run the following commands:
@@ -84,25 +82,22 @@ docker-compose exec web mypy .
 
 7. We use ruff as linter and formatting. Eventaully will setup pre-commit hooks for this.
 
-
 ## LOCAL GPU
 
+Tested on Windows 11 with RTX 3090 TI (8g VRAM) on WSL2 backend running Ubuntu 24.04 LTS as the default WSL distr.
 
-Tested on Windows 11 with RTX 3090 TI (8g VRAM) on WSL2 backend running Ubuntu 24.04 LTS as the default WSL distr. 
+1. Make sure you can access your GPUs via running (adjust the version as needed depending on your CUDA and Ubuntu version):
 
-1. Make sure you can access your GPUs via running:
-
-`docker run -it --gpus=all --rm nvidia/cuda:12.6.1-cudnn-runtime-ubuntu24.04 nvidia-smi` 
+`docker run -it --gpus=all --rm nvidia/cuda:12.6.1-cudnn-runtime-ubuntu24.04 nvidia-smi`
 
 The nvidia-smi utility allows users to query information on the accessible devices. If it worked, you are in luck. Otherwise, you will have to debug and fix the erros, which are specific to your machine and setup.
 
 Here some helpful information to help you debug. Please note - local installation are highly-specific per machine and setup and generally not reproducible. How to enable GPU access in your WSL2 is outside the scope of this repo and not something we can help with.
 
-
 1. Upgrade your Nvidia drivers from here: https://www.nvidia.com/Download/index.aspx
 
-
 2. Install CUDA toolkit in WSL2: https://developer.nvidia.com/cuda-downloads?target_os=Linux&target_arch=x86_64&Distribution=WSL-Ubuntu&target_version=2.0&target_type=deb_local
+
 ```
 wget https://developer.download.nvidia.com/compute/cuda/repos/wsl-ubuntu/x86_64/cuda-wsl-ubuntu.pin
 sudo mv cuda-wsl-ubuntu.pin /etc/apt/preferences.d/cuda-repository-pin-600
@@ -129,3 +124,5 @@ sudo systemctl restart docker
 ```
 
 This direction are largely the same whether you are doing a Ubuntu inside WSL or a Ubuntu somewhere else (VPS) - and should work in production if you decide to go this route (we do not recommend). Check the links as some of the commands might have changed and are different for different versions of CUDA and Ubuntu.
+
+We do not recommend this setup in production, as it doesn't scale well and you will be scaling expensive GPU servers to handle CRUD operations on the database. We recommend using a serverless GPU service like Lambda or Runpod (what we are using in production) for the embeddings service.
