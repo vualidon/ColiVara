@@ -1,4 +1,4 @@
-""" WARNING: The setting defaults are for development only. Change them for production via .env file. """
+"""WARNING: The setting defaults are for development only. Change them for production via .env file."""
 
 from pathlib import Path
 

@@ -10,6 +10,7 @@ from typing import Any, Dict, List
 
 import aiohttp
 import magic
+from accounts.models import CustomUser
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -17,8 +18,6 @@ from django.db.models import FloatField, Func, JSONField
 from django_stubs_ext.db.models import TypedModelMeta
 from pdf2image import convert_from_bytes
 from pgvector.django import HalfVectorField
-
-from accounts.models import CustomUser
 
 
 class Collection(models.Model):
@@ -42,7 +41,6 @@ class Collection(models.Model):
 
 
 class Document(models.Model):
-
     collection = models.ForeignKey(
         Collection, on_delete=models.CASCADE, related_name="documents"
     )

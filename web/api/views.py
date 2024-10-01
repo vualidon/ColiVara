@@ -2,6 +2,7 @@ import base64
 from typing import Dict, List, Optional, Union
 
 import aiohttp
+from accounts.models import CustomUser
 from django.conf import settings
 from django.contrib.postgres.aggregates import ArrayAgg
 from django.core.exceptions import ValidationError
@@ -16,8 +17,6 @@ from ninja.security import HttpBearer
 from pgvector.utils import HalfVector
 from pydantic import Field, model_validator
 from typing_extensions import Self
-
-from accounts.models import CustomUser
 
 from .models import Collection, Document, MaxSim, Page
 

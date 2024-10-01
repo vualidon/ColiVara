@@ -11,19 +11,35 @@ services:
       - ./web:/code
     depends_on:
       - db
+      - embeddings
     env_file:
       - ./.env.dev
   
   gotenberg:
     image: gotenberg/gotenberg:8
 
-
+  # we recommend running a managed version of Postgres in production (RDS, GCP, etc)
   db:
     image: pgvector/pgvector:pg16
     volumes:
       - postgres_data:/var/lib/postgresql/data/
     environment:
       - "POSTGRES_HOST_AUTH_METHOD=trust"
+
+  # we recommend running serverless GPU functions in production (Lambda, RunPod, etc)
+  embeddings:
+    image: jonathanadly/colipali-embeddings:20240930-local
+    ports:
+      - "8000:8000"
+
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     
 volumes:
   postgres_data:
