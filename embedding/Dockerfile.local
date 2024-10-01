@@ -26,4 +26,4 @@ COPY models_hub /models_hub
 # Add src files (Worker Template)
 ADD src .
 
-CMD python3.11 -u /handler.py
+CMD python3.11 -u /handler.py --rp_serve_api --rp_api_host 0.0.0.0

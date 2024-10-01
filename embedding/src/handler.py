@@ -1,12 +1,10 @@
 import base64
 from io import BytesIO
-from typing import Any, Dict, List, Tuple
-
+from typing import List, Dict, Any, Tuple
+import runpod
 import torch
 from colpali_engine.models import ColPali, ColPaliProcessor
-from fastapi import FastAPI, HTTPException
 from PIL import Image
-from pydantic import BaseModel
 
 device_map = "cuda" if torch.cuda.is_available() else None
 
@@ -179,24 +177,4 @@ def handler(job: Dict[str, Any]) -> Dict[str, Any]:
         raise ValueError(f"Invalid task: {job_input['task']}")
 
 
-# fast api wrapper
-
-
-app = FastAPI()
-
-
-class JobInput(BaseModel):
-    input: Dict[str, Any]
-
-
-@app.get("/health")
-def health():
-    return {"status": "ok"}
-
-
-@app.post("/run")
-def embeddings(job: JobInput):
-    try:
-        return handler(job.dict())
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+runpod.serverless.start({"handler": handler})

@@ -8,4 +8,5 @@ __pycache__/
 .coverage
 .DS_Store
 .env.prod
+cuda-keyring_1.1-1_all.deb
 embedding/models_hub/

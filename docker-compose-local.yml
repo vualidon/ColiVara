@@ -28,23 +28,18 @@ services:
 
   # we recommend running serverless GPU functions in production (Lambda, RunPod, etc)
   embeddings:
-    # image link: https://hub.docker.com/r/tjmlabs/paliembed
-    image: tjmlabs/paliembed:20240930 # can be accessed inside web container at http://embeddings:8000
+    image: jonathanadly/colipali-embeddings:20240930-local
+    ports:
+      - "8000:8000"
 
-    # to build the image locally (if you made modifications), replace the image with the following:
-    #build: ./embedding
-
-    # Local requires GPU: make sure to install the nvidia-container-toolkit on your host machine
 
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              count: all
+              count: 1
               capabilities: [gpu]
-    
-    # barely works on 4 cpu cores, 12gb ram Apple - will likely crash your machine on CPU
     
 volumes:
   postgres_data:
