@@ -1,4 +1,5 @@
 import base64
+from enum import Enum
 from typing import Dict, List, Optional, Union
 
 import aiohttp
@@ -714,4 +715,64 @@ async def file_to_base64(request, file: UploadedFile = File(...)) -> Dict[str, s
     return {"data": base64.b64encode(document_data).decode()}
 
 
-# Emeddings - send a document or a query, get embeddings back - Example Response {"page_1": [0.1, 0.2, 0.3, ...], "page_2": [0.4, 0.5, 0.6, ...]}
+""" Embeddings """
+
+
+class TaskEnum(str, Enum):
+    image = "image"
+    query = "query"
+
+
+class EmbeddingsIn(Schema):
+    input_data: List[str]
+    task: TaskEnum
+
+
+class EmbeddingsOut(Schema):
+    _object: str
+    data: List[dict]
+    model: str
+    usage: dict
+
+
+@router.post("/embeddings", tags=["embeddings"], auth=Bearer())
+async def embeddings(request: Request, payload: EmbeddingsIn) -> EmbeddingsOut:
+    """
+    Embed a list of documents.
+
+    This endpoint allows the user to embed a list of documents.
+
+    Args:
+        request: The HTTP request object, which includes the user information.
+        payload (EmbeddingsIn): The input data for embedding the documents.
+
+    Returns:
+        EmbeddingsOut: The embeddings of the documents and metadata.
+
+    Raises:
+        HttpError: If the documents cannot be embedded.
+    """
+    EMBEDDINGS_URL = settings.EMBEDDINGS_URL
+    embed_token = settings.EMBEDDINGS_URL_TOKEN
+    headers = {"Authorization": f"Bearer {embed_token}"}
+    task = payload.task
+    input_data = payload.input_data
+    payload = {
+        "input": {
+            "task": task,
+            "input_data": input_data,
+        }
+    }
+    async with aiohttp.ClientSession() as session:
+        async with session.post(
+            EMBEDDINGS_URL, json=payload, headers=headers
+        ) as response:
+            if response.status != 200:
+                raise ValidationError(
+                    "Failed to get embeddings from the embeddings service."
+                )
+            out = await response.json()
+            out = out["output"]
+            # change object to _object
+            out["_object"] = out.pop("object")
+            return out

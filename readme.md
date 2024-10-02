@@ -33,9 +33,9 @@ You can import an openAPI spec (for example for Postman) from the swagger docume
 
 1.  Python SDK for the API
 2.  Filter by metadata on collection and document
-3.  Embeddings Endpoint (user responsible for storage and querying - aka I want to use Qdrant as my storage)
-4.  Documentation for the API
-5.  Basic sanity check evals
+3.  Documentation for the API
+4.  Basic sanity check evals
+5.  Use ColQwen as the backend for the embeddings service
 
 ## Wishlist
 
