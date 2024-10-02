@@ -1,9 +1,8 @@
 import base64
 
 import pytest
-from ninja.testing import TestAsyncClient
-
 from accounts.models import CustomUser
+from ninja.testing import TestAsyncClient
 
 from .models import Collection, Document, Page, PageEmbedding
 from .views import Bearer, router
@@ -436,3 +435,18 @@ async def test_search_documents(async_client, user, collection, document):
     )
     assert response.status_code == 200
     assert response.json() != []
+
+
+""" Embedding tests """
+
+
+async def test_create_embedding(async_client, user):
+    task = "query"
+    input_data = ["What is 1 + 1"]
+    response = await async_client.post(
+        "/embeddings",
+        json={"task": task, "input_data": input_data},
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 200
+    assert response.json()["data"] != []
