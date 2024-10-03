@@ -28,4 +28,4 @@ COPY models_hub /models_hub
 # Add src files (Worker Template)
 ADD src .
 
-CMD python3.11 -u /handler.py
+CMD python3 -u /handler.py
