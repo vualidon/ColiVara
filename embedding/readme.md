@@ -7,7 +7,7 @@ Download the models from huggingface and save them in the `models_hub` directory
 1. Run local image
 
 ```bash
-docker run -it --rm jonathanadly/colipali-embeddings:version-local
+docker run -it --rm tjmlabs/yarr-embedding-service:version-local
 ```
 
 2. Build image
@@ -27,7 +27,7 @@ python src/handler.py --rp_serve_api
 4. Push image to docker hub
 
 ```bash
-docker push jonathanadly/colipali-embeddings:version
+docker push tjmlabs/yarr-embedding-service::version
 ```
 
 ## Hosting

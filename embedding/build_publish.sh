@@ -5,8 +5,8 @@
 # ./embedding/build_publish.sh cloud  # For cloud build
 
 # Set these variables
-DOCKER_USERNAME="jonathanadly"
-IMAGE_NAME="colipali-embeddings"
+DOCKER_USERNAME="tjmlabs"
+IMAGE_NAME="yarr-embedding-service"
 VERSION=$(date +'%Y%m%d') # version is today's date, example: 20210101
 
 # Determine version suffix and Dockerfile based on argument
