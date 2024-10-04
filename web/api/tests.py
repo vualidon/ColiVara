@@ -5,7 +5,7 @@ from accounts.models import CustomUser
 from ninja.testing import TestAsyncClient
 
 from .models import Collection, Document, Page, PageEmbedding
-from .views import Bearer, router
+from .views import Bearer, QueryFilter, QueryIn, filter_query, router
 
 
 # sanity check
@@ -437,6 +437,191 @@ async def test_search_documents(async_client, user, collection, document):
     assert response.json() != []
 
 
+""" Search Filtering tests """
+
+
+# we will create a fixture just for these tests
+@pytest.fixture
+async def search_filter_fixture(user):
+    collection, _ = await Collection.objects.aget_or_create(
+        name="Test Collection Filtering Fixture",
+        metadata={"type": "AI papers"},
+        owner=user,
+    )
+    document_1, _ = await Document.objects.aget_or_create(
+        name="Attention is All You Need",
+        collection=collection,
+        url="https://proceedings.neurips.cc/paper_files/paper/2017/file/3f5ee243547dee91fbd053c1c4a845aa-Paper.pdf",
+        metadata={"important": True},
+    )
+    document_2, _ = await Document.objects.aget_or_create(
+        name="BMX : Entropy-weighted Similarity and Semantic-enhanced Lexical Search",
+        collection=collection,
+        url="https://arxiv.org/pdf/2408.06643v2",
+        metadata={"important": False},
+    )
+    # create or get a page for the document
+    page_1, _ = await Page.objects.aget_or_create(
+        document=document_1,
+        page_number=1,
+        defaults={"img_base64": "base64_string"},
+    )
+
+    await PageEmbedding.objects.aget_or_create(
+        page=page_1,
+        defaults={"embedding": [0.1 for _ in range(128)]},
+    )
+    # create or get a page for the document
+    page_2, _ = await Page.objects.aget_or_create(
+        document=document_2,
+        page_number=1,
+        defaults={"img_base64": "base64_string"},
+    )
+
+    await PageEmbedding.objects.aget_or_create(
+        page=page_2,
+        defaults={"embedding": [0.1 for _ in range(128)]},
+    )
+    return collection, document_1, document_2
+
+
+async def test_search_filter_collection_id(async_client, user, collection, document):
+    response = await async_client.post(
+        "/search",
+        json={"query": "What is 1 + 1", "top_k": 1, "collection_id": 1},
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 200
+    assert response.json() != []
+
+
+async def test_search_filter_key_equals(async_client, user, search_filter_fixture):
+    collection, document_1, document_2 = search_filter_fixture
+
+    # Create a QueryIn object with a collection_id and a query_filter
+    query_in = QueryIn(
+        query="test query",
+        collection_id=collection.id,
+        query_filter=QueryFilter(
+            on="document", key="important", value=True, lookup="key_lookup"
+        ),
+    )
+
+    # Call the filter_query function
+    result = await filter_query(query_in, user)
+
+    # Check if the result is a QuerySet
+    assert isinstance(result, Page.objects.all().__class__)
+
+    # Check if only one document is returned (the one with important=True)
+    count = await result.acount()
+    assert count == 1
+    # get the page from the queryset
+    page = await result.afirst()
+    # check if the page belongs to the correct document
+    assert page.document == document_1
+
+
+async def test_filter_query_document_contains(search_filter_fixture, user):
+    collection, document_1, _ = search_filter_fixture
+    query_in = QueryIn(
+        query="test query",
+        collection_id=collection.id,
+        query_filter=QueryFilter(
+            on="document", key="important", value=True, lookup="contains"
+        ),
+    )
+    result = await filter_query(query_in, user)
+    count = await result.acount()
+    assert count == 1
+    page = await result.afirst()
+    assert page.document == document_1
+
+
+async def test_filter_query_collection_metadata(search_filter_fixture, user):
+    collection, _, _ = search_filter_fixture
+    query_in = QueryIn(
+        query="test query",
+        query_filter=QueryFilter(
+            on="collection", key="type", value="AI papers", lookup="key_lookup"
+        ),
+    )
+    result = await filter_query(query_in, user)
+    count = await result.acount()
+    assert count == 2
+
+    # now check when count should be 0
+    query_in = QueryIn(
+        query="test query",
+        query_filter=QueryFilter(
+            on="collection", key="type", value="AI papers 2", lookup="key_lookup"
+        ),
+    )
+    result = await filter_query(query_in, user)
+    count = await result.acount()
+    assert count == 0
+
+
+async def test_filter_query_has_key(search_filter_fixture, user):
+    collection, _, _ = search_filter_fixture
+    query_in = QueryIn(
+        query="test query",
+        collection_id=collection.id,
+        query_filter=QueryFilter(on="document", key="important", lookup="has_key"),
+    )
+    result = await filter_query(query_in, user)
+    count = await result.acount()
+    assert count == 2
+
+    # test if key is not there
+    query_in_2 = QueryIn(
+        query="test query",
+        collection_id=collection.id,
+        query_filter=QueryFilter(on="document", key="not_there", lookup="has_key"),
+    )
+    result = await filter_query(query_in_2, user)
+    count = await result.acount()
+    assert count == 0
+
+
+async def test_filter_query_has_keys(search_filter_fixture, user):
+    collection, _, _ = search_filter_fixture
+    query_in = QueryIn(
+        query="test query",
+        collection_id=collection.id,
+        query_filter=QueryFilter(on="document", key=["important"], lookup="has_keys"),
+    )
+    result = await filter_query(query_in, user)
+    count = await result.acount()
+    assert count == 2
+
+    # test if key is not there
+    query_in_2 = QueryIn(
+        query="test query",
+        collection_id=collection.id,
+        query_filter=QueryFilter(on="document", key=["not_there"], lookup="has_keys"),
+    )
+    result = await filter_query(query_in_2, user)
+    count = await result.acount()
+    assert count == 0
+
+
+async def test_filter_query_document_contained_by(search_filter_fixture, user):
+    collection, document_1, _ = search_filter_fixture
+    query_in = QueryIn(
+        query="test query",
+        collection_id=collection.id,
+        query_filter=QueryFilter(
+            on="document", key="important", value=True, lookup="contained_by"
+        ),
+    )
+    result = await filter_query(query_in, user)
+    count = await result.acount()
+    assert count == 1
+    page = await result.afirst()
+    assert page.document == document_1
+
+
 """ Embedding tests """
 
 
@@ -450,3 +635,23 @@ async def test_create_embedding(async_client, user):
     )
     assert response.status_code == 200
     assert response.json()["data"] != []
+
+
+""" Model tests """
+
+
+async def test_collection_str_method(collection):
+    assert str(collection) == "Test Collection Fixture"
+
+
+async def test_document_str_method(document):
+    assert str(document) == "Test Document Fixture"
+
+
+async def test_page_str_method(document):
+    page = await Page.objects.acreate(
+        document=document,
+        page_number=1,
+        img_base64="base64_string",
+    )
+    assert str(page) == "Test Document Fixture - Page 1"
