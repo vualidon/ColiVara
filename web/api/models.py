@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import logging
 import mimetypes
 import os
 import re
@@ -18,6 +19,9 @@ from django.db.models import FloatField, Func, JSONField
 from django_stubs_ext.db.models import TypedModelMeta
 from pdf2image import convert_from_bytes
 from pgvector.django import HalfVectorField
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
+
+logger = logging.getLogger(__name__)
 
 
 class Collection(models.Model):
@@ -83,9 +87,16 @@ class Document(models.Model):
         """
         # Constants
         EMBEDDINGS_URL = settings.EMBEDDINGS_URL
-        EMBEDDINGS_BATCH_SIZE = 5
+        EMBEDDINGS_BATCH_SIZE = 3
+        DELAY_BETWEEN_BATCHES = 1  # seconds
 
         # Helper function to send a batch of images to the embeddings service
+        @retry(
+            stop=stop_after_attempt(3),
+            wait=wait_fixed(5),
+            reraise=True,
+            retry=retry_if_exception_type(aiohttp.ClientError),
+        )
         async def send_batch(
             session: aiohttp.ClientSession, images: List[str]
         ) -> List[Dict[str, Any]]:
@@ -118,13 +129,20 @@ class Document(models.Model):
                 EMBEDDINGS_URL, json=payload, headers=headers
             ) as response:
                 if response.status != 200:
+                    logger.error(
+                        f"Failed to get embeddings from the embeddings service. Status code: {response.status}"
+                    )
                     raise ValidationError(
                         "Failed to get embeddings from the embeddings service."
                     )
                 out = await response.json()
+                logger.info(
+                    f"Got embeddings for batch of {len(images)} images. delayTime: {out['delayTime']}, executionTime: {out['executionTime']}"
+                )
             return out["output"]["data"]
 
         base64_images = await self._prep_document()
+        logger.info(f"Successfully prepped document {self.name}")
         # Split the images into batches
         batches = [
             base64_images[i : i + EMBEDDINGS_BATCH_SIZE]
@@ -134,21 +152,31 @@ class Document(models.Model):
         try:
             # we save the document first, then save the pages
             await self.asave()
+            logger.info(f"Starting the process to save document {self.name}")
 
             async with aiohttp.ClientSession() as session:
-                # Use gather to send all batches concurrently
-                embedding_results = await asyncio.gather(
-                    *[send_batch(session, batch) for batch in batches]
-                )
+                embedding_results = []
+                for i, batch in enumerate(batches):
+                    # Process batches sequentially
+                    batch_result = await send_batch(session, batch)
+                    embedding_results.extend(batch_result)
 
-            # Flatten the results
-            all_embeddings = [
-                embedding
-                for batch_result in embedding_results
-                for embedding in batch_result
-            ]
+                    logger.info(
+                        f"Processed batch {i+1}/{len(batches)} for document {self.name}"
+                    )
 
-            for i, embedding_obj in enumerate(all_embeddings):
+                    if i < len(batches) - 1:  # Don't delay after the last batch
+                        logger.info(
+                            f"Waiting {DELAY_BETWEEN_BATCHES} seconds before processing next batch"
+                        )
+                        # we don't want to overload the embeddings service
+                        await asyncio.sleep(DELAY_BETWEEN_BATCHES)
+
+            logger.info(
+                f"Successfully got embeddings for all pages in document {self.name}"
+            )
+
+            for i, embedding_obj in enumerate(embedding_results):
                 # we want to assert that the embeddings is a list of a list of 128 floats
                 # each page = 1 embedding, an
                 # exampple all_embeddings = [
@@ -177,7 +205,10 @@ class Document(models.Model):
                     for embedding in embedding_obj["embedding"]
                 ]
                 await PageEmbedding.objects.abulk_create(bulk_create_embeddings)
-
+                logger.info(
+                    f"Successfully saved page {page.page_number} in document {self.name}"
+                )
+            logger.info(f"Successfully saved all pages in document {self.name}")
         except Exception as e:
             # If there's an error, delete the document and pages
             await self.adelete()  # will cascade delete the pages
@@ -359,6 +390,12 @@ class Document(models.Model):
                     )
                     return await response.read(), filename
 
+        async def is_pdf_url(url):
+            async with aiohttp.ClientSession() as session:
+                async with session.head(url, allow_redirects=True) as response:
+                    content_type = response.headers.get("Content-Type", "").lower()
+                    return "application/pdf" in content_type
+
         # Step 1: Validate the document
         filename = None
 
@@ -366,8 +403,12 @@ class Document(models.Model):
         if self.url and not document_data:
             parsed_url = urllib.parse.urlparse(self.url)
             url_extension = get_extension(parsed_url.path)
+            is_pdf = await is_pdf_url(self.url)
+            logger.info(f"Is PDF: {is_pdf}, URL Extension: {url_extension}")
+            if is_pdf:
+                document_data, filename = await fetch_document(self.url)
 
-            if url_extension == "" or url_extension not in ALLOWED_EXTENSIONS:
+            elif url_extension == "" or url_extension not in ALLOWED_EXTENSIONS:
                 # Likely a webpage URL, convert to PDF via Gotenberg
                 try:
                     pdf_data = await self._convert_url_to_pdf(self.url)
@@ -377,6 +418,7 @@ class Document(models.Model):
                     raise ValidationError(f"Failed to convert URL to PDF: {str(e)}")
 
             else:
+                # non-pdf document - we still fetch it, and will convert it to pdf later
                 document_data, filename = await fetch_document(self.url)
 
         elif self.base64 and not document_data:
@@ -413,6 +455,7 @@ class Document(models.Model):
         else:
             extension = get_extension(filename)
 
+        logger.info(f"Document extension: {extension}")
         # Validate file extension
         if extension not in ALLOWED_EXTENSIONS:
             raise ValidationError(f"File extension .{extension} is not allowed.")
@@ -422,13 +465,16 @@ class Document(models.Model):
         is_pdf = extension == "pdf"
         # Step 2: Convert to PDF if necessary
         if not is_image and not is_pdf:
+            logger.info(f"Converting document to PDF. Extension: {extension}")
             # Use Gotenberg to convert to PDF
             filename = f"{filename}.{extension}"
             pdf_data = await self._convert_to_pdf(document_data, filename)
         elif is_pdf:
+            logger.info("Document is already a PDF.")
             pdf_data = document_data
         else:
             # if it is an image, convert it to base64 and return
+            logger.info("Document is an image. Converting to base64.")
             img_base64 = base64.b64encode(document_data).decode("utf-8")
             return [img_base64]
 
@@ -436,6 +482,7 @@ class Document(models.Model):
         # Step 3: Turn the PDF into images via pdf2image
         try:
             images = convert_from_bytes(pdf_data)
+            logger.info(f"Successfully converted PDF to {len(images)} images.")
         except Exception as e:
             raise ValidationError(f"Failed to convert PDF to images: {str(e)}")
 
@@ -452,6 +499,12 @@ class Document(models.Model):
         # Step 5: returning the base64 images
         return base64_images
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_fixed(2),
+        reraise=True,
+        retry=retry_if_exception_type(aiohttp.ClientError),
+    )
     async def _convert_to_pdf(self, document_data: bytes, filename: str) -> bytes:
         """
         Helper method to convert documents to PDF using Gotenberg.
@@ -483,6 +536,12 @@ class Document(models.Model):
                 pdf_data = await response.read()
         return pdf_data
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_fixed(2),
+        reraise=True,
+        retry=retry_if_exception_type(aiohttp.ClientError),
+    )
     async def _convert_url_to_pdf(self, url: str) -> bytes:
         """
         Helper method to convert a webpage URL to PDF using Gotenberg.
@@ -490,7 +549,7 @@ class Document(models.Model):
         Gotenberg_URL = "http://gotenberg:3000"
         endpoint = "/forms/chromium/convert/url"
         gotenberg_url = Gotenberg_URL + endpoint
-
+        logger.info(f"Converting URL to PDF as a Webpage: {url}")
         # Prepare the form data for Gotenberg
         form = aiohttp.FormData()
         form.add_field("url", url, content_type="text/plain")

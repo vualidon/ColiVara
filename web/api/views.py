@@ -1,4 +1,5 @@
 import base64
+import logging
 from enum import Enum
 from typing import Dict, List, Optional, Union
 
@@ -8,6 +9,7 @@ from django.conf import settings
 from django.contrib.postgres.aggregates import ArrayAgg
 from django.core.exceptions import ValidationError
 from django.db.models import Count
+from django.db.models.query import QuerySet
 from django.db.utils import IntegrityError
 from django.http.request import HttpRequest
 from django.shortcuts import aget_object_or_404
@@ -22,6 +24,9 @@ from typing_extensions import Self
 from .models import Collection, Document, MaxSim, Page
 
 router = Router()
+
+
+logger = logging.getLogger(__name__)
 
 
 @router.get("/health", tags=["health"])
@@ -283,7 +288,7 @@ async def upsert_document(
     request: Request, collection_id: int, payload: DocumentIn
 ) -> Dict[str, Union[int, str]]:
     """
-    Create or update a document in a collection.
+    Create or update a document in a collection. Average latency is 7 seconds per page.
 
     This endpoint allows the user to create or update a document in a collection.
     The document can be provided as a URL or a base64-encoded string.
@@ -311,6 +316,9 @@ async def upsert_document(
             name=payload.name, collection=collection
         ).aexists()
         if exists:
+            logger.info(
+                f"Document {payload.name} already exists, updating metadata and embeddings."
+            )
             # we update the metadata and embeddings
             document = await Document.objects.aget(
                 name=payload.name, collection=collection
@@ -318,7 +326,10 @@ async def upsert_document(
             document.metadata = payload.metadata
             document.url = url
             document.base64 = base64
+            # we delete the old pages, since we will re-embed the document
+            await document.pages.all().adelete()
         else:
+            logger.info(f"Document {payload.name} does not exist, creating it.")
             # we create a new document
             document = Document(
                 name=payload.name,
@@ -536,10 +547,69 @@ async def delete_document(
 """ Search """
 
 
+class QueryFilter(Schema):
+    class onEnum(str, Enum):
+        document = "document"
+        collection = "collection"
+
+    class lookupEnum(str, Enum):
+        key_lookup = "key_lookup"
+        contains = "contains"
+        contained_by = "contained_by"
+        has_key = "has_key"
+        has_keys = "has_keys"
+        has_any_keys = "has_any_keys"
+
+    on: onEnum = onEnum.document
+    # key is a str or a list of str
+    key: Union[str, List[str]]
+    # value can be any - we can accept int, float, str, bool
+    value: Optional[Union[str, int, float, bool]] = None
+    lookup: lookupEnum = lookupEnum.key_lookup
+
+    # validation rules:
+    # 1. if looks up is contains or contained_by, value must be a string, and key must be a string
+    # 2. if lookup is has_keys, or has_any_keys, key must be a list of strings - we can transform automatically - value must be None
+    # 3. if lookup is has_key, key must be a string, value must be None
+    @model_validator(mode="after")
+    def validate_filter(self) -> Self:
+        if self.lookup in ["contains", "contained_by", "key_lookup"]:
+            if not isinstance(self.key, str):
+                raise ValueError("Key must be a string.")
+            if self.value is None:
+                raise ValueError("Value must be provided.")
+        if self.lookup in ["has_key"]:
+            if not isinstance(self.key, str):
+                raise ValueError("Key must be a string.")
+            if self.value is not None:
+                raise ValueError("Value must be None.")
+        if self.lookup in ["has_keys", "has_any_keys"]:
+            if isinstance(self.key, str):
+                self.key = [self.key]
+            if not isinstance(self.key, list):
+                raise ValueError("Key must be a list of strings.")
+            if self.value is not None:
+                raise ValueError("Value must be None.")
+        return self
+
+
 class QueryIn(Schema):
     query: str
     collection_id: Optional[int] = None
     top_k: Optional[int] = 3
+    query_filter: Optional[QueryFilter] = None
+
+    # query_filter should look like this: {"on": "document or collection", "key": "key", "value": "value"}
+    # this is transformed as such .filter(metadata__contains={"breed": "collie"})
+    # validation: if a collection_id is provided, query_filter "on" must be "document" or query_filter must be None
+    @model_validator(mode="after")
+    def validate_query_filter(self) -> Self:
+        if self.collection_id and self.query_filter:
+            if self.query_filter.on == "collection":
+                raise ValueError(
+                    "If a collection_id is provided, the query_filter must be on 'document'."
+                )
+        return self
 
 
 class PageOutQuery(Schema):
@@ -587,12 +657,10 @@ async def search(request: Request, payload: QueryIn) -> QueryOut:
         HalfVector(embedding).to_text() for embedding in query_embeddings
     ]
 
-    # building the query: 1. get all pages in collection/collection owner
-    base_query = Page.objects.select_related("document__collection")
-    if payload.collection_id:
-        base_query = base_query.filter(document__collection_id=payload.collection_id)
-    else:
-        base_query = base_query.filter(document__collection__owner=request.auth)
+    # building the query:
+
+    # 1. filter the pages based on the collection_id and the query_filter
+    base_query = await filter_query(payload, request.auth)
 
     # 2. annotate the query with the max sim score
     # maxsim needs 2 arrays of embeddings, one for the pages and one for the query
@@ -666,6 +734,36 @@ async def get_query_embeddings(query: str) -> List:
             # example: [[0.1, 0.2, 0.3, ...], [0.4, 0.5, 0.6, ...]]
             return out["output"]["data"][0]["embedding"]
     return []
+
+
+async def filter_query(payload: QueryIn, user: CustomUser) -> QuerySet[Page]:
+    base_query = Page.objects.select_related("document__collection")
+    if payload.collection_id:
+        base_query = base_query.filter(document__collection_id=payload.collection_id)
+    else:
+        base_query = base_query.filter(document__collection__owner=user)
+
+    if payload.query_filter:
+        on = payload.query_filter.on
+        key = payload.query_filter.key
+        value = payload.query_filter.value
+        lookup = payload.query_filter.lookup
+        field_prefix = (
+            "document__collection__metadata"
+            if on == "collection"
+            else "document__metadata"
+        )
+        lookup_operations = {
+            "key_lookup": lambda k, v: {f"{field_prefix}__{k}": v},
+            "contains": lambda k, v: {f"{field_prefix}__contains": {k: v}},
+            "contained_by": lambda k, v: {f"{field_prefix}__contained_by": {k: v}},
+            "has_key": lambda k, _: {f"{field_prefix}__has_key": k},
+            "has_keys": lambda k, _: {f"{field_prefix}__has_keys": k},
+            "has_any_keys": lambda k, _: {f"{field_prefix}__has_any_keys": k},
+        }
+        filter_params = lookup_operations[lookup](key, value)
+        base_query = base_query.filter(**filter_params)
+    return base_query
 
 
 """ helpers """
@@ -757,7 +855,7 @@ async def embeddings(request: Request, payload: EmbeddingsIn) -> EmbeddingsOut:
     headers = {"Authorization": f"Bearer {embed_token}"}
     task = payload.task
     input_data = payload.input_data
-    payload = {
+    embed_payload = {
         "input": {
             "task": task,
             "input_data": input_data,
@@ -765,14 +863,14 @@ async def embeddings(request: Request, payload: EmbeddingsIn) -> EmbeddingsOut:
     }
     async with aiohttp.ClientSession() as session:
         async with session.post(
-            EMBEDDINGS_URL, json=payload, headers=headers
+            EMBEDDINGS_URL, json=embed_payload, headers=headers
         ) as response:
             if response.status != 200:
                 raise ValidationError(
                     "Failed to get embeddings from the embeddings service."
                 )
-            out = await response.json()
-            out = out["output"]
+            response_data = await response.json()
+            output_data = response_data["output"]
             # change object to _object
-            out["_object"] = out.pop("object")
-            return out
+            output_data["_object"] = output_data.pop("object")
+            return EmbeddingsOut(**output_data)
