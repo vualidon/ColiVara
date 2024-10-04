@@ -32,10 +32,14 @@ You can import an openAPI spec (for example for Postman) from the swagger docume
 ## Roadmap for 1.0 Release
 
 1.  Python SDK for the API
-2.  Filter by metadata on collection and document
-3.  Documentation for the API
-4.  Basic sanity check evals
-5.  Use ColQwen as the backend for the embeddings service
+2.  Documentation for the API
+3.  Quality of life improvements for the API (Collection name instead of ID, wait for embeddings vs return immediately)
+
+## Roadmap for 2.0 Release
+
+1. Evals for quality + latency
+2. Demo
+3. Typescript SDK
 
 ## Wishlist
 
@@ -68,7 +72,7 @@ user = CustomUser.objects.first().token # save this token somewhere (I will make
 
 4. Application will be running at http://localhost:8001 and the swagger documentation at http://localhost:8001/v1/docs
 
-5. To run tests - we have 92% test coverage
+5. To run tests - we have 93% test coverage
 
 ```
 docker-compose exec web pytest
