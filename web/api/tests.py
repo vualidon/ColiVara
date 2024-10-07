@@ -132,8 +132,13 @@ async def test_create_collection(async_client, user):
         json={"name": "Test Collection Fixture", "metadata": {"key": "value"}},
         headers={"Authorization": f"Bearer {user.token}"},
     )
-    assert response.status_code == 200
-    assert response.json() == {"id": 1, "message": "Collection created successfully"}
+    assert response.status_code == 201
+    # we return collectionOut in the response
+    assert response.json() == {
+        "id": 1,
+        "name": "Test Collection Fixture",
+        "metadata": {"key": "value"},
+    }
 
 
 async def test_create_collection_unique(async_client, user, collection):
@@ -146,8 +151,9 @@ async def test_create_collection_unique(async_client, user, collection):
 
 
 async def test_get_collections(async_client, user, collection):
+    collection_name = "Test Collection Fixture"
     response = await async_client.get(
-        "/collections/1",
+        f"/collections/{collection_name}",
         headers={"Authorization": f"Bearer {user.token}"},
     )
     assert response.status_code == 200
@@ -170,17 +176,23 @@ async def test_list_collection(async_client, user, collection):
 
 
 async def test_patch_collection(async_client, user, collection):
+    collection_name = "Test Collection Fixture"
     response = await async_client.patch(
-        "/collections/1",
+        f"/collections/{collection_name}",
         json={"name": "Test Collection Update", "metadata": {"key": "value"}},
         headers={"Authorization": f"Bearer {user.token}"},
     )
     assert response.status_code == 200
-    assert response.json() == {"message": "Collection updated successfully"}
+    assert response.json() == {
+        "id": 1,
+        "name": "Test Collection Update",
+        "metadata": {"key": "value"},
+    }
 
     # now check if the collection was actually updated
+    new_collection_name = "Test Collection Update"
     response = await async_client.get(
-        "/collections/1",
+        f"/collections/{new_collection_name}",
         headers={"Authorization": f"Bearer {user.token}"},
     )
     assert response.status_code == 200
@@ -192,16 +204,16 @@ async def test_patch_collection(async_client, user, collection):
 
 
 async def test_delete_collection(async_client, user, collection):
+    collection_name = "Test Collection Fixture"
     response = await async_client.delete(
-        "/collections/1",
+        f"/collections/{collection_name}",
         headers={"Authorization": f"Bearer {user.token}"},
     )
-    assert response.status_code == 200
-    assert response.json() == {"message": "Collection deleted successfully"}
+    assert response.status_code == 204
 
     # now check if the collection was actually deleted
     response = await async_client.get(
-        "/collections/1",
+        f"/collections/{collection_name}",
         headers={"Authorization": f"Bearer {user.token}"},
     )
     assert response.status_code == 404

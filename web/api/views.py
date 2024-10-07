@@ -1,7 +1,7 @@
 import base64
 import logging
 from enum import Enum
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import aiohttp
 from accounts.models import CustomUser
@@ -79,10 +79,19 @@ class CollectionOut(Schema):
     metadata: dict
 
 
-@router.post("/collections", tags=["collections"], auth=Bearer())
+class GenericError(Schema):
+    detail: str
+
+
+@router.post(
+    "/collections",
+    tags=["collections"],
+    auth=Bearer(),
+    response={201: CollectionOut, 409: GenericError},
+)
 async def create_collection(
     request: Request, payload: CollectionIn
-) -> Dict[str, Union[int, str]]:
+) -> CollectionOut | Tuple[int, Dict[str, str]]:
     """
     Create a new collection.
 
@@ -102,12 +111,13 @@ async def create_collection(
         collection = await Collection.objects.acreate(
             name=payload.name, owner=request.auth, metadata=payload.metadata
         )
-        return {"id": collection.id, "message": "Collection created successfully"}
-    except IntegrityError:
-        raise HttpError(
-            409,
-            "You already have a collection with this name, did you mean to update it? Use PATCH instead.",
+        return 201, CollectionOut(
+            id=collection.id, name=collection.name, metadata=collection.metadata
         )
+    except IntegrityError:
+        return 409, {
+            "detail": "You already have a collection with this name, did you mean to update it? Use PATCH instead."
+        }
 
 
 @router.get(
@@ -128,25 +138,28 @@ async def list_collections(request: Request) -> List[CollectionOut]:
     Raises:
         HTTPException: If there is an issue with the request or authentication.
     """
-    collections = []
-    async for c in Collection.objects.filter(owner=request.auth):
-        collections.append(CollectionOut(id=c.id, name=c.name, metadata=c.metadata))
+    collections = [
+        CollectionOut(id=c.id, name=c.name, metadata=c.metadata)
+        async for c in Collection.objects.filter(owner=request.auth)
+    ]
     return collections
 
 
 @router.get(
-    "/collections/{collection_id}",
-    response=CollectionOut,
+    "/collections/{collection_name}",
+    response={200: CollectionOut, 404: GenericError},
     tags=["collections"],
     auth=Bearer(),
 )
-async def get_collection(request: Request, collection_id: int) -> CollectionOut:
+async def get_collection(
+    request: Request, collection_name: str
+) -> CollectionOut | Tuple[int, Dict[str, str]]:
     """
-    Retrieve a collection by its ID.
+    Retrieve a collection by its name.
 
     Args:
         request: The request object containing authentication information.
-        collection_id (int): The ID of the collection to retrieve.
+        collection_name (str): The name of the collection to retrieve.
 
     Returns:
         CollectionOut: The retrieved collection with its ID, name, and metadata.
@@ -155,7 +168,7 @@ async def get_collection(request: Request, collection_id: int) -> CollectionOut:
         HTTPException: If the collection is not found or the user is not authorized to access it.
 
     Endpoint:
-        GET /collections/{collection_id}
+        GET /collections/{collection_name}
 
     Tags:
         collections
@@ -163,18 +176,26 @@ async def get_collection(request: Request, collection_id: int) -> CollectionOut:
     Authentication:
         Bearer token required.
     """
-    collection = await aget_object_or_404(
-        Collection, id=collection_id, owner=request.auth
-    )
-    return CollectionOut(
-        id=collection.id, name=collection.name, metadata=collection.metadata
-    )
+    try:
+        collection = await Collection.objects.aget(
+            name=collection_name, owner=request.auth
+        )
+        return CollectionOut(
+            id=collection.id, name=collection.name, metadata=collection.metadata
+        )
+    except Collection.DoesNotExist:
+        return 404, {"detail": f"Collection: {collection_name} doesn't exist"}
 
 
-@router.patch("/collections/{collection_id}", tags=["collections"], auth=Bearer())
+@router.patch(
+    "/collections/{collection_name}",
+    tags=["collections"],
+    auth=Bearer(),
+    response={200: CollectionOut, 404: GenericError},
+)
 async def partial_update_collection(
-    request: Request, collection_id: int, payload: CollectionIn
-) -> Dict[str, str]:
+    request: Request, collection_name: str, payload: CollectionIn
+) -> CollectionOut | Tuple[int, Dict[str, str]]:
     """
     Partially update a collection.
 
@@ -182,7 +203,7 @@ async def partial_update_collection(
 
     Args:
         request: The request object containing authentication details.
-        collection_id (int): The ID of the collection to be updated.
+        collection_name (str): The name of the collection to be updated.
         payload (CollectionIn): The payload containing the fields to be updated.
 
     Returns:
@@ -191,21 +212,34 @@ async def partial_update_collection(
     Raises:
         HTTPException: If the collection is not found or the user is not authorized to update it.
     """
-    collection = await aget_object_or_404(
-        Collection, id=collection_id, owner=request.auth
-    )
+    try:
+        collection = await Collection.objects.aget(
+            name=collection_name, owner=request.auth
+        )
+    except Collection.DoesNotExist:
+        return 404, {"detail": f"Collection: {collection_name} doesn't exist"}
+
     collection.name = payload.name or collection.name
     collection.metadata = payload.metadata or collection.metadata
     await collection.asave()
-    return {"message": "Collection updated successfully"}
+    return CollectionOut(
+        id=collection.id, name=collection.name, metadata=collection.metadata
+    )
 
 
-@router.delete("/collections/{collection_id}", tags=["collections"], auth=Bearer())
-async def delete_collection(request: Request, collection_id: int) -> Dict[str, str]:
+@router.delete(
+    "/collections/{collection_name}",
+    tags=["collections"],
+    auth=Bearer(),
+    response={204: None, 404: GenericError},
+)
+async def delete_collection(
+    request: Request, collection_name: str
+) -> Tuple[int, None] | Tuple[int, Dict[str, str]]:
     """
-    Delete a collection by its ID.
+    Delete a collection by its name.
 
-    This endpoint deletes a collection specified by the `collection_id` parameter.
+    This endpoint deletes a collection specified by the `collection_name` parameter.
     The collection must belong to the authenticated user.
 
     Args:
@@ -218,11 +252,15 @@ async def delete_collection(request: Request, collection_id: int) -> Dict[str, s
     Raises:
         HTTPException: If the collection does not exist or does not belong to the authenticated user.
     """
-    collection = await aget_object_or_404(
-        Collection, id=collection_id, owner=request.auth
-    )
+    try:
+        collection = await Collection.objects.aget(
+            name=collection_name, owner=request.auth
+        )
+    except Collection.DoesNotExist:
+        return 404, {"detail": f"Collection: {collection_name} doesn't exist"}
+
     await collection.adelete()
-    return {"message": "Collection deleted successfully"}
+    return 204, None
 
 
 """Documents"""

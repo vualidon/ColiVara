@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 class Collection(models.Model):
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=255, db_index=True)
     owner = models.ForeignKey(
         CustomUser, on_delete=models.CASCADE, related_name="collections"
     )
@@ -41,6 +41,10 @@ class Collection(models.Model):
             models.UniqueConstraint(
                 fields=["name", "owner"], name="unique_collection_per_user"
             )
+        ]
+
+        indexes = [
+            models.Index(fields=["name", "owner"], name="collection_name_owner_idx")
         ]
 
 
