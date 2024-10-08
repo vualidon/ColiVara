@@ -150,10 +150,10 @@ async def test_create_collection_unique(async_client, user, collection):
     assert response.status_code == 409
 
 
-async def test_get_collections(async_client, user, collection):
+async def test_get_collection_by_name(async_client, user, collection):
     collection_name = "Test Collection Fixture"
     response = await async_client.get(
-        f"/collections/{collection_name}",
+        f"/collections/{collection_name}/",
         headers={"Authorization": f"Bearer {user.token}"},
     )
     assert response.status_code == 200
@@ -166,7 +166,7 @@ async def test_get_collections(async_client, user, collection):
 
 async def test_list_collection(async_client, user, collection):
     response = await async_client.get(
-        "/collections",
+        "/collections/",
         headers={"Authorization": f"Bearer {user.token}"},
     )
     assert response.status_code == 200
@@ -192,7 +192,7 @@ async def test_patch_collection(async_client, user, collection):
     # now check if the collection was actually updated
     new_collection_name = "Test Collection Update"
     response = await async_client.get(
-        f"/collections/{new_collection_name}",
+        f"/collections/{new_collection_name}/",
         headers={"Authorization": f"Bearer {user.token}"},
     )
     assert response.status_code == 200
@@ -213,7 +213,7 @@ async def test_delete_collection(async_client, user, collection):
 
     # now check if the collection was actually deleted
     response = await async_client.get(
-        f"/collections/{collection_name}",
+        f"/collections/{collection_name}/",
         headers={"Authorization": f"Bearer {user.token}"},
     )
     assert response.status_code == 404
@@ -222,17 +222,49 @@ async def test_delete_collection(async_client, user, collection):
 """ Document tests """
 
 
-async def test_create_document_pdf_url(async_client, user, collection):
+async def test_create_document_pdf_url(async_client, user):
     response = await async_client.post(
-        "/collections/1/document",
+        "/documents/upsert-document/",
         json={
             "name": "Test Document Fixture",
             "url": "https://pdfobject.com/pdf/sample.pdf",
         },
         headers={"Authorization": f"Bearer {user.token}"},
     )
-    assert response.status_code == 200
-    assert response.json() == {"id": 1, "message": "Document created successfully"}
+    assert response.status_code == 201
+    assert response.json() == {
+        "id": 1,
+        "name": "Test Document Fixture",
+        "metadata": {},
+        "url": "https://pdfobject.com/pdf/sample.pdf",
+        "base64": "",
+        "num_pages": 1,
+        "collection_name": "default collection",
+        "pages": None,
+    }
+
+
+async def test_create_document_pdf_url_collection(async_client, user, collection):
+    response = await async_client.post(
+        "/documents/upsert-document/",
+        json={
+            "name": "Test Document Fixture",
+            "url": "https://pdfobject.com/pdf/sample.pdf",
+            "collection": collection.name,
+        },
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 201
+    assert response.json() == {
+        "id": 1,
+        "name": "Test Document Fixture",
+        "metadata": {},
+        "url": "https://pdfobject.com/pdf/sample.pdf",
+        "base64": "",
+        "num_pages": 1,
+        "collection_name": collection.name,
+        "pages": None,
+    }
 
 
 async def test_create_document_pdf_base64(async_client, user, collection):
@@ -243,29 +275,37 @@ async def test_create_document_pdf_base64(async_client, user, collection):
         base64_string = base64_string = base64.b64encode(f.read()).decode("utf-8")
 
     response = await async_client.post(
-        "/collections/1/document",
+        "/documents/upsert-document/",
         json={
             "name": "Test Document Fixture",
             "base64": base64_string,
         },
         headers={"Authorization": f"Bearer {user.token}"},
     )
-    assert response.status_code == 200
-    assert response.json() == {"id": 1, "message": "Document created successfully"}
+    assert response.status_code == 201
+    assert response.json() == {
+        "id": 1,
+        "name": "Test Document Fixture",
+        "metadata": {},
+        "url": "",
+        "base64": base64_string,
+        "num_pages": 1,
+        "collection_name": "default collection",
+        "pages": None,
+    }
 
 
 async def test_create_document_docx_url(async_client, user, collection):
     url = "https://www.cte.iup.edu/cte/Resources/DOCX_TestPage.docx"
     response = await async_client.post(
-        "/collections/1/document",
+        "/documents/upsert-document/",
         json={
             "name": "Test Document Fixture",
             "url": url,
         },
         headers={"Authorization": f"Bearer {user.token}"},
     )
-    assert response.status_code == 200
-    assert response.json() == {"id": 1, "message": "Document created successfully"}
+    assert response.status_code == 201
 
     await Document.objects.all().adelete()
 
@@ -276,43 +316,40 @@ async def test_create_document_docx_base64(async_client, user, collection):
         base64_string = base64.b64encode(f.read()).decode("utf-8")
 
     response = await async_client.post(
-        "/collections/1/document",
+        "/documents/upsert-document/",
         json={
             "name": "Test Document Fixture",
             "base64": base64_string,
         },
         headers={"Authorization": f"Bearer {user.token}"},
     )
-    assert response.status_code == 200
-    assert response.json() == {"id": 1, "message": "Document created successfully"}
+    assert response.status_code == 201
 
 
 async def test_create_document_webpage(async_client, user, collection):
     url = "https://gotenberg.dev/docs/getting-started/introduction"
     response = await async_client.post(
-        "/collections/1/document",
+        "/documents/upsert-document/",
         json={
             "name": "Test Document Fixture",
             "url": url,
         },
         headers={"Authorization": f"Bearer {user.token}"},
     )
-    assert response.status_code == 200
-    assert response.json() == {"id": 1, "message": "Document created successfully"}
+    assert response.status_code == 201
 
 
 async def test_create_document_image_url(async_client, user, collection):
     url = "https://www.w3schools.com/w3css/img_lights.jpg"
     response = await async_client.post(
-        "/collections/1/document",
+        "/documents/upsert-document/",
         json={
             "name": "Test Document Fixture",
             "url": url,
         },
         headers={"Authorization": f"Bearer {user.token}"},
     )
-    assert response.status_code == 200
-    assert response.json() == {"id": 1, "message": "Document created successfully"}
+    assert response.status_code == 201
 
 
 async def test_create_document_image_base64(async_client, user, collection):
@@ -321,20 +358,20 @@ async def test_create_document_image_base64(async_client, user, collection):
         base64_string = base64.b64encode(f.read()).decode("utf-8")
 
     response = await async_client.post(
-        "/collections/1/document",
+        "/documents/upsert-document/",
         json={
             "name": "Test Document Fixture",
             "base64": base64_string,
         },
         headers={"Authorization": f"Bearer {user.token}"},
     )
-    assert response.status_code == 200
-    assert response.json() == {"id": 1, "message": "Document created successfully"}
+    assert response.status_code == 201
 
 
-async def test_get_document_by_id(async_client, user, collection, document):
+async def test_get_document_by_name(async_client, user, collection, document):
+    document_name = document.name
     response = await async_client.get(
-        "/collections/1/documents/1?expand=pages",
+        f"documents/{document_name}/?collection_name=all&expand=pages",
         headers={"Authorization": f"Bearer {user.token}"},
     )
     assert response.status_code == 200
@@ -358,7 +395,7 @@ async def test_get_document_by_id(async_client, user, collection, document):
 
 async def test_get_documents(async_client, user, collection, document):
     response = await async_client.get(
-        "/collections/1/documents",
+        f"/documents/?collection_name={collection.name}",
         headers={"Authorization": f"Bearer {user.token}"},
     )
     assert response.status_code == 200
@@ -377,25 +414,35 @@ async def test_get_documents(async_client, user, collection, document):
 
 
 async def test_patch_document_no_embed(async_client, user, collection, document):
+    # we are changing the name
     response = await async_client.patch(
-        "/collections/1/documents/1",
-        json={"name": "Test Document Update", "metadata": {"key": "value"}},
-        headers={"Authorization": f"Bearer {user.token}"},
-    )
-    assert response.status_code == 200
-    assert response.json() == {"message": "Document updated successfully"}
-
-    # now check if the document was actually updated
-    response = await async_client.get(
-        "/collections/1/documents/1",
+        f"/documents/{document.name}/",
+        json={"name": "Test Document Update", "collection": collection.name},
         headers={"Authorization": f"Bearer {user.token}"},
     )
     assert response.status_code == 200
     assert response.json() == {
         "id": 1,
         "name": "Test Document Update",
-        "metadata": {"key": "value"},
+        "metadata": {},
         "url": "https://www.example.com",
+        "base64": "",
+        "num_pages": 1,
+        "collection_name": "Test Collection Fixture",
+        "pages": None,
+    }
+    new_document_name = "Test Document Update"
+    # now check if the document was actually updated
+    response = await async_client.get(
+        f"/documents/{new_document_name}/?collection_name={collection.name}",
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": 1,
+        "name": "Test Document Update",
+        "url": "https://www.example.com",
+        "metadata": {},
         "base64": "",
         "num_pages": 1,
         "collection_name": "Test Collection Fixture",
@@ -411,29 +458,38 @@ async def test_patch_document_embed(async_client, user, collection, document):
 
     # we updated the base64 string of the page
     response = await async_client.patch(
-        "/collections/1/documents/1",
+        f"/documents/{document.name}/",
         json={
             "name": "Test Document Update",
             "base64": base64_string,
             "metadata": {"key": "value"},
+            "collection": collection.name,
         },
         headers={"Authorization": f"Bearer {user.token}"},
     )
     assert response.status_code == 200
-    assert response.json() == {"message": "Document updated successfully"}
+    assert response.json() == {
+        "id": 1,
+        "name": "Test Document Update",
+        "metadata": {"key": "value"},
+        "base64": base64_string,
+        "url": "",
+        "num_pages": 1,
+        "collection_name": "Test Collection Fixture",
+        "pages": None,
+    }
 
 
 async def test_delete_document(async_client, user, collection, document):
     response = await async_client.delete(
-        "/collections/1/documents/1",
+        f"/documents/delete-document/{document.name}/?collection_name=all",
         headers={"Authorization": f"Bearer {user.token}"},
     )
-    assert response.status_code == 200
-    assert response.json() == {"message": "Document deleted successfully"}
+    assert response.status_code == 204
 
     # now check if the document was actually deleted
     response = await async_client.get(
-        "/collections/1/documents/1",
+        f"/documents/{document.name}/?collection_name=all",
         headers={"Authorization": f"Bearer {user.token}"},
     )
     assert response.status_code == 404

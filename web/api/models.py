@@ -15,7 +15,7 @@ from accounts.models import CustomUser
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.db.models import FloatField, Func, JSONField
+from django.db.models import FloatField, Func, JSONField, Q
 from django_stubs_ext.db.models import TypedModelMeta
 from pdf2image import convert_from_bytes
 from pgvector.django import HalfVectorField
@@ -40,7 +40,11 @@ class Collection(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=["name", "owner"], name="unique_collection_per_user"
-            )
+            ),
+            # disallow the name "all" for collections
+            models.CheckConstraint(
+                condition=~Q(name="all"), name="collection_name_not_all"
+            ),
         ]
 
         indexes = [
@@ -52,7 +56,7 @@ class Document(models.Model):
     collection = models.ForeignKey(
         Collection, on_delete=models.CASCADE, related_name="documents"
     )
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=255, db_index=True)
     url = models.URLField(blank=True)
     base64 = models.TextField(blank=True)
     metadata = JSONField(default=dict)
@@ -66,6 +70,11 @@ class Document(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=["name", "collection"], name="unique_document_per_collection"
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["name", "collection"], name="document_name_collection_idx"
             )
         ]
 
