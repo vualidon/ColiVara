@@ -1,6 +1,6 @@
-## PaliAPI
+## ColiVara = COntextualized Late Interaction Vision Augmented Retrieval API
 
-A document retrieval API with ColiPali as the backend.
+A document retrieval API with ColQwen as the backend.
 
 Components:
 

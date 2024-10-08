@@ -362,6 +362,10 @@ async def upsert_document(
         }
     """
     # if the user didn't give a collection, payload.collection will be "default collection"
+    if payload.collection_name == "all":
+        return 400, GenericError(
+            detail="The collection name 'all' is not allowed when inserting or updating a document - only when retrieving. Please provide a valid collection name."
+        )
     collection, _ = await Collection.objects.aget_or_create(
         name=payload.collection_name, owner=request.auth
     )
@@ -748,8 +752,6 @@ class QueryFilter(Schema):
             if self.value is not None:
                 raise ValueError("Value must be None.")
         if self.lookup in ["has_keys", "has_any_keys"]:
-            if isinstance(self.key, str):
-                self.key = [self.key]
             if not isinstance(self.key, list):
                 raise ValueError("Key must be a list of strings.")
             if self.value is not None:
@@ -782,8 +784,15 @@ class QueryOut(Schema):
     results: List[PageOutQuery]
 
 
-@router.post("/search/", tags=["search"], auth=Bearer())
-async def search(request: Request, payload: QueryIn) -> QueryOut:
+@router.post(
+    "/search/",
+    tags=["search"],
+    auth=Bearer(),
+    response={200: QueryOut, 503: GenericError},
+)
+async def search(
+    request: Request, payload: QueryIn
+) -> Tuple[int, QueryOut] | Tuple[int, GenericError]:
     """
     Search for pages similar to a given query.
 
@@ -815,7 +824,10 @@ async def search(request: Request, payload: QueryIn) -> QueryOut:
         }
     """
     query_embeddings = await get_query_embeddings(payload.query)
-
+    if not query_embeddings:
+        return 503, GenericError(
+            detail="Failed to get embeddings from the embeddings service"
+        )
     query_length = len(query_embeddings)  # we need this for normalization
 
     # we want to cast the embeddings to halfvec
@@ -874,7 +886,7 @@ async def search(request: Request, payload: QueryIn) -> QueryOut:
         )
         async for row in results
     ]
-    return QueryOut(query=payload.query, results=formatted_results)
+    return 200, QueryOut(query=payload.query, results=formatted_results)
 
 
 async def get_query_embeddings(query: str) -> List:
@@ -892,9 +904,10 @@ async def get_query_embeddings(query: str) -> List:
             EMBEDDINGS_URL, json=payload, headers=headers
         ) as response:
             if response.status != 200:
-                raise ValidationError(
-                    "Failed to get embeddings from the embeddings service."
+                logger.error(
+                    f"Failed to get embeddings from the embeddings service: {response.status}"
                 )
+                return []
             out = await response.json()
             # returning  a dynamic array of embeddings, each of which is a list of 128 floats
             # example: [[0.1, 0.2, 0.3, ...], [0.4, 0.5, 0.6, ...]]
@@ -1005,8 +1018,15 @@ class EmbeddingsOut(Schema):
     usage: dict
 
 
-@router.post("/embeddings/", tags=["embeddings"], auth=Bearer())
-async def embeddings(request: Request, payload: EmbeddingsIn) -> EmbeddingsOut:
+@router.post(
+    "/embeddings/",
+    tags=["embeddings"],
+    auth=Bearer(),
+    response={200: EmbeddingsOut, 503: GenericError},
+)
+async def embeddings(
+    request: Request, payload: EmbeddingsIn
+) -> Tuple[int, EmbeddingsOut] | Tuple[int, GenericError]:
     """
     Embed a list of documents.
 
@@ -1038,11 +1058,11 @@ async def embeddings(request: Request, payload: EmbeddingsIn) -> EmbeddingsOut:
             EMBEDDINGS_URL, json=embed_payload, headers=headers
         ) as response:
             if response.status != 200:
-                raise ValidationError(
-                    "Failed to get embeddings from the embeddings service."
+                return 503, GenericError(
+                    detail="Failed to get embeddings from the embeddings service"
                 )
             response_data = await response.json()
             output_data = response_data["output"]
             # change object to _object
             output_data["_object"] = output_data.pop("object")
-            return EmbeddingsOut(**output_data)
+            return 200, EmbeddingsOut(**output_data)
