@@ -1,11 +1,12 @@
 import base64
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 from accounts.models import CustomUser
+from api.middleware import add_slash
+from api.models import Collection, Document, Page, PageEmbedding
+from api.views import Bearer, QueryFilter, QueryIn, filter_query, router
 from ninja.testing import TestAsyncClient
-
-from .models import Collection, Document, Page, PageEmbedding
-from .views import Bearer, QueryFilter, QueryIn, filter_query, router
 
 
 # sanity check
@@ -128,7 +129,7 @@ async def test_missing_token(bearer):
 
 async def test_create_collection(async_client, user):
     response = await async_client.post(
-        "/collections",
+        "/collections/",
         json={"name": "Test Collection Fixture", "metadata": {"key": "value"}},
         headers={"Authorization": f"Bearer {user.token}"},
     )
@@ -143,11 +144,30 @@ async def test_create_collection(async_client, user):
 
 async def test_create_collection_unique(async_client, user, collection):
     response = await async_client.post(
-        "/collections",
+        "/collections/",
         json={"name": "Test Collection Fixture", "metadata": {"key": "value"}},
         headers={"Authorization": f"Bearer {user.token}"},
     )
     assert response.status_code == 409
+
+
+async def test_create_collection_with_all(async_client, user):
+    response = await async_client.post(
+        "/collections/",
+        json={"name": "all"},
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 422
+    assert response.json() == {
+        "detail": [
+            {
+                "type": "value_error",
+                "loc": ["body", "payload"],
+                "msg": "Value error, Collection name 'all' is not allowed.",
+                "ctx": {"error": "Collection name 'all' is not allowed."},
+            }
+        ]
+    }
 
 
 async def test_get_collection_by_name(async_client, user, collection):
@@ -178,7 +198,7 @@ async def test_list_collection(async_client, user, collection):
 async def test_patch_collection(async_client, user, collection):
     collection_name = "Test Collection Fixture"
     response = await async_client.patch(
-        f"/collections/{collection_name}",
+        f"/collections/{collection_name}/",
         json={"name": "Test Collection Update", "metadata": {"key": "value"}},
         headers={"Authorization": f"Bearer {user.token}"},
     )
@@ -206,7 +226,7 @@ async def test_patch_collection(async_client, user, collection):
 async def test_delete_collection(async_client, user, collection):
     collection_name = "Test Collection Fixture"
     response = await async_client.delete(
-        f"/collections/{collection_name}",
+        f"/collections/{collection_name}/",
         headers={"Authorization": f"Bearer {user.token}"},
     )
     assert response.status_code == 204
@@ -244,13 +264,37 @@ async def test_create_document_pdf_url(async_client, user):
     }
 
 
+async def test_create_document_pdf_url_base64(async_client, user):
+    response = await async_client.post(
+        "/documents/upsert-document/",
+        json={
+            "name": "Test Document Fixture",
+            "url": "https://pdfobject.com/pdf/sample.pdf",
+            "base64": "base64_string",
+        },
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 422
+
+
+async def test_create_document_no_url_no_base64(async_client, user):
+    response = await async_client.post(
+        "/documents/upsert-document/",
+        json={
+            "name": "Test Document Fixture",
+        },
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 422
+
+
 async def test_create_document_pdf_url_collection(async_client, user, collection):
     response = await async_client.post(
         "/documents/upsert-document/",
         json={
             "name": "Test Document Fixture",
             "url": "https://pdfobject.com/pdf/sample.pdf",
-            "collection": collection.name,
+            "collection_name": collection.name,
         },
         headers={"Authorization": f"Bearer {user.token}"},
     )
@@ -268,9 +312,9 @@ async def test_create_document_pdf_url_collection(async_client, user, collection
 
 
 async def test_create_document_pdf_base64(async_client, user, collection):
-    # test_docs/ is a directory in the root of the project - we will use a sample PDF file from there
+    # test_docs/ is a directory in the same level as the test.py file - we will use a sample PDF file from there
 
-    with open("test_docs/sample.pdf", "rb") as f:
+    with open("api/tests/test_docs/sample.pdf", "rb") as f:
         # convert the file to base64
         base64_string = base64_string = base64.b64encode(f.read()).decode("utf-8")
 
@@ -311,7 +355,7 @@ async def test_create_document_docx_url(async_client, user, collection):
 
 
 async def test_create_document_docx_base64(async_client, user, collection):
-    with open("test_docs/sample.docx", "rb") as f:
+    with open("api/tests/test_docs/sample.docx", "rb") as f:
         # convert the file to base64
         base64_string = base64.b64encode(f.read()).decode("utf-8")
 
@@ -353,7 +397,7 @@ async def test_create_document_image_url(async_client, user, collection):
 
 
 async def test_create_document_image_base64(async_client, user, collection):
-    with open("test_docs/sample.png", "rb") as f:
+    with open("api/tests/test_docs/sample.png", "rb") as f:
         # convert the file to base64
         base64_string = base64.b64encode(f.read()).decode("utf-8")
 
@@ -417,7 +461,7 @@ async def test_patch_document_no_embed(async_client, user, collection, document)
     # we are changing the name
     response = await async_client.patch(
         f"/documents/{document.name}/",
-        json={"name": "Test Document Update", "collection": collection.name},
+        json={"name": "Test Document Update", "collection_name": collection.name},
         headers={"Authorization": f"Bearer {user.token}"},
     )
     assert response.status_code == 200
@@ -452,7 +496,7 @@ async def test_patch_document_no_embed(async_client, user, collection, document)
 
 async def test_patch_document_embed(async_client, user, collection, document):
     # we will change the base64 string of the page
-    with open("test_docs/sample.png", "rb") as f:
+    with open("api/tests/test_docs/sample.png", "rb") as f:
         # convert the file to base64
         base64_string = base64.b64encode(f.read()).decode("utf-8")
 
@@ -463,7 +507,7 @@ async def test_patch_document_embed(async_client, user, collection, document):
             "name": "Test Document Update",
             "base64": base64_string,
             "metadata": {"key": "value"},
-            "collection": collection.name,
+            "collection_name": collection.name,
         },
         headers={"Authorization": f"Bearer {user.token}"},
     )
@@ -478,6 +522,33 @@ async def test_patch_document_embed(async_client, user, collection, document):
         "collection_name": "Test Collection Fixture",
         "pages": None,
     }
+
+
+async def test_patch_document_url_and_base64(async_client, user, collection, document):
+    # we updated the base64 string of the page
+    response = await async_client.patch(
+        f"/documents/{document.name}/",
+        json={
+            "name": "Test Document Update",
+            "base64": "base64_string",
+            "url": "https://www.example.com",
+            "metadata": {"key": "value"},
+            "collection_name": collection.name,
+        },
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 422
+
+
+async def test_patch_document_no_data_to_update(
+    async_client, user, collection, document
+):
+    response = await async_client.patch(
+        f"/documents/{document.name}/",
+        json={},
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 422
 
 
 async def test_delete_document(async_client, user, collection, document):
@@ -497,7 +568,7 @@ async def test_delete_document(async_client, user, collection, document):
 
 async def test_search_documents(async_client, user, collection, document):
     response = await async_client.post(
-        "/search",
+        "/search/",
         json={"query": "What is 1 + 1", "top_k": 1},
         headers={"Authorization": f"Bearer {user.token}"},
     )
@@ -553,10 +624,10 @@ async def search_filter_fixture(user):
     return collection, document_1, document_2
 
 
-async def test_search_filter_collection_id(async_client, user, collection, document):
+async def test_search_filter_collection_name(async_client, user, collection, document):
     response = await async_client.post(
-        "/search",
-        json={"query": "What is 1 + 1", "top_k": 1, "collection_id": 1},
+        "/search/",
+        json={"query": "What is 1 + 1", "top_k": 1, "collection_name": collection.name},
         headers={"Authorization": f"Bearer {user.token}"},
     )
     assert response.status_code == 200
@@ -566,10 +637,10 @@ async def test_search_filter_collection_id(async_client, user, collection, docum
 async def test_search_filter_key_equals(async_client, user, search_filter_fixture):
     collection, document_1, document_2 = search_filter_fixture
 
-    # Create a QueryIn object with a collection_id and a query_filter
+    # Create a QueryIn object with a collection_name and a query_filter
     query_in = QueryIn(
         query="test query",
-        collection_id=collection.id,
+        collection_name=collection.name,
         query_filter=QueryFilter(
             on="document", key="important", value=True, lookup="key_lookup"
         ),
@@ -594,7 +665,7 @@ async def test_filter_query_document_contains(search_filter_fixture, user):
     collection, document_1, _ = search_filter_fixture
     query_in = QueryIn(
         query="test query",
-        collection_id=collection.id,
+        collection_name=collection.name,
         query_filter=QueryFilter(
             on="document", key="important", value=True, lookup="contains"
         ),
@@ -610,6 +681,7 @@ async def test_filter_query_collection_metadata(search_filter_fixture, user):
     collection, _, _ = search_filter_fixture
     query_in = QueryIn(
         query="test query",
+        collection_name="all",
         query_filter=QueryFilter(
             on="collection", key="type", value="AI papers", lookup="key_lookup"
         ),
@@ -634,7 +706,7 @@ async def test_filter_query_has_key(search_filter_fixture, user):
     collection, _, _ = search_filter_fixture
     query_in = QueryIn(
         query="test query",
-        collection_id=collection.id,
+        collection_name=collection.name,
         query_filter=QueryFilter(on="document", key="important", lookup="has_key"),
     )
     result = await filter_query(query_in, user)
@@ -656,7 +728,7 @@ async def test_filter_query_has_keys(search_filter_fixture, user):
     collection, _, _ = search_filter_fixture
     query_in = QueryIn(
         query="test query",
-        collection_id=collection.id,
+        collection_name=collection.name,
         query_filter=QueryFilter(on="document", key=["important"], lookup="has_keys"),
     )
     result = await filter_query(query_in, user)
@@ -666,7 +738,7 @@ async def test_filter_query_has_keys(search_filter_fixture, user):
     # test if key is not there
     query_in_2 = QueryIn(
         query="test query",
-        collection_id=collection.id,
+        collection_name=collection.name,
         query_filter=QueryFilter(on="document", key=["not_there"], lookup="has_keys"),
     )
     result = await filter_query(query_in_2, user)
@@ -678,7 +750,7 @@ async def test_filter_query_document_contained_by(search_filter_fixture, user):
     collection, document_1, _ = search_filter_fixture
     query_in = QueryIn(
         query="test query",
-        collection_id=collection.id,
+        collection_name=collection.name,
         query_filter=QueryFilter(
             on="document", key="important", value=True, lookup="contained_by"
         ),
@@ -697,7 +769,7 @@ async def test_create_embedding(async_client, user):
     task = "query"
     input_data = ["What is 1 + 1"]
     response = await async_client.post(
-        "/embeddings",
+        "/embeddings/",
         json={"task": task, "input_data": input_data},
         headers={"Authorization": f"Bearer {user.token}"},
     )
@@ -723,3 +795,201 @@ async def test_page_str_method(document):
         img_base64="base64_string",
     )
     assert str(page) == "Test Document Fixture - Page 1"
+
+
+""" Test Middleware """
+
+
+@pytest.fixture
+def mock_get_response_sync():
+    return Mock()
+
+
+@pytest.fixture
+def mock_get_response_async():
+    """Mock for asynchronous get_response."""
+    return AsyncMock()
+
+
+@pytest.fixture
+def mock_request():
+    request = MagicMock()
+    request.path = "/test"
+    request.path_info = "/test"
+    request.META = {}
+    request.session = {}
+    return request
+
+
+@pytest.mark.parametrize("get_response_type", ["sync", "async"])
+@pytest.mark.parametrize(
+    "path, should_append",
+    [
+        ("/test", True),
+        ("/swagger/docs", False),
+        ("/already/slashed/", False),
+        ("/another/test", True),
+        ("/redoc/path", False),
+        ("/openapi", False),
+        ("/some/path", True),
+    ],
+)
+async def test_add_slash_middleware(
+    get_response_type,
+    path,
+    should_append,
+    mock_get_response_sync,
+    mock_get_response_async,
+    mock_request,
+):
+    """Parametrized test covering both sync and async get_response."""
+    # Modify the mock_request based on the parameter
+    mock_request.path = path
+    mock_request.path_info = path
+
+    if get_response_type == "sync":
+        get_response = mock_get_response_sync
+        get_response.reset_mock()
+        # Apply the middleware with synchronous get_response
+        middleware = add_slash(get_response)
+        # Call the middleware with the mock request
+        middleware(mock_request)
+        if should_append:
+            assert mock_request.path == f"{path}/"
+            assert mock_request.path_info == f"{path}/"
+        else:
+            assert mock_request.path == path
+            assert mock_request.path_info == path
+        get_response.assert_called_once_with(mock_request)
+    else:  # async
+        get_response = mock_get_response_async
+        get_response.reset_mock()
+        # Apply the middleware with asynchronous get_response
+        middleware = add_slash(get_response)
+        # Call the middleware with the mock request
+        await middleware(mock_request)
+        if should_append:
+            assert mock_request.path == f"{path}/"
+            assert mock_request.path_info == f"{path}/"
+        else:
+            assert mock_request.path == path
+            assert mock_request.path_info == path
+        get_response.assert_awaited_once_with(mock_request)
+
+
+""" Test Misc """
+
+
+async def test_embeddings_service_down(async_client, user):
+    EMBEDDINGS_POST_PATH = "api.models.aiohttp.ClientSession.post"
+    # Create a mock response object with status 500
+    mock_response = AsyncMock()
+    mock_response.status = 500
+    mock_response.json.return_value = AsyncMock(return_value={"error": "Service Down"})
+
+    # Mock the context manager __aenter__ to return the mock_response
+    mock_response.__aenter__.return_value = mock_response
+
+    # Patch the aiohttp.ClientSession.post method to return the mock_response
+    with patch(EMBEDDINGS_POST_PATH, return_value=mock_response) as mock_post:
+        # Perform the POST request to trigger embed_document
+        response = await async_client.post(
+            "/documents/upsert-document/",
+            json={
+                "name": "Test Document Fixture",
+                "url": "https://pdfobject.com/pdf/sample.pdf",
+            },
+            headers={"Authorization": f"Bearer {user.token}"},
+        )
+
+        # Assert that the embeddings service was called correctly
+        mock_post.assert_called_once()
+        args, kwargs = mock_post.call_args
+        assert kwargs["json"]["input"]["task"] == "image"
+        assert "Authorization" in kwargs["headers"]
+
+        # Assert that the response status code reflects the failure
+        assert (
+            response.status_code == 400
+        )  # Assuming your view returns 400 on ValidationError
+
+        # Optionally, check the response content for the error message
+
+        assert response.json() == {
+            "detail": "[\"Failed to save pages: ['Failed to get embeddings from the embeddings service.']\"]"
+        }
+
+
+async def test_embed_document_arxiv(async_client, user):
+    response = await async_client.post(
+        "/documents/upsert-document/",
+        json={
+            "name": "Test Document Fixture",
+            "url": "https://arxiv.org/pdf/2408.06643v2",
+        },
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 201
+
+
+async def test_document_fetch_failure(async_client, user):
+    AIOHTTP_GET_PATH = "api.models.aiohttp.ClientSession.get"
+    mock_response = AsyncMock()
+    mock_response.status = 500
+    mock_response.headers = {}
+    mock_response.read = AsyncMock(return_value=b"")
+
+    # Mock the context manager __aenter__ to return the mock_response
+    mock_response.__aenter__.return_value = mock_response
+
+    # Patch the aiohttp.ClientSession.get method to return the mock_response
+    with patch(AIOHTTP_GET_PATH, return_value=mock_response) as mock_get:
+        # Perform the POST request to trigger embed_document via your endpoint
+        response = await async_client.post(
+            "/documents/upsert-document/",
+            json={
+                "name": "Test Document Fetch Failure",
+                "url": "https://example.com/nonexistent.pdf",
+            },
+            headers={"Authorization": f"Bearer {user.token}"},
+        )
+
+        # Assert that the fetch_document was called correctly
+        mock_get.assert_called_once_with("https://example.com/nonexistent.pdf")
+
+        # Assert that the response status code reflects the failure
+        assert response.status_code == 400
+
+
+async def test_document_file_too_big(async_client, user):
+    AIOHTTP_GET_PATH = "api.models.aiohttp.ClientSession.get"
+    MAX_SIZE_BYTES = 50 * 1024 * 1024
+    mock_response = AsyncMock()
+    mock_response.status = 200
+    mock_response.headers = {
+        "Content-Length": str(MAX_SIZE_BYTES + 1),  # 50MB + 1 byte
+    }
+    mock_response.read = AsyncMock(
+        return_value=b"x" * (MAX_SIZE_BYTES + 1)
+    )  # Dummy content
+
+    # Mock the context manager __aenter__ to return the mock_response
+    mock_response.__aenter__.return_value = mock_response
+
+    # Patch the aiohttp.ClientSession.get method to return the mock_response
+    with patch(AIOHTTP_GET_PATH, return_value=mock_response) as mock_get:
+        # Perform the POST request to trigger embed_document via your endpoint
+        response = await async_client.post(
+            "/documents/upsert-document/",
+            json={
+                "name": "Test Document File Too Large",
+                "url": "https://example.com/largefile.pdf",
+            },
+            headers={"Authorization": f"Bearer {user.token}"},
+        )
+
+        # Assert that the fetch_document was called correctly
+        mock_get.assert_called_once_with("https://example.com/largefile.pdf")
+
+        # Assert that the response status code reflects the failure
+        assert response.status_code == 400

@@ -17,13 +17,12 @@ def add_slash(get_response):
             return await get_response(request)
     else:
 
-        def middleware(get_response):
-            def middleware(request):
-                keep_as_is = any(
-                    x in request.path for x in ["openapi", "swagger", "redoc", "docs"]
-                )
-                if not request.path.endswith("/") and not keep_as_is:
-                    request.path_info = request.path = f"{request.path}/"
-                return get_response(request)
+        def middleware(request):
+            keep_as_is = any(
+                x in request.path for x in ["openapi", "swagger", "redoc", "docs"]
+            )
+            if not request.path.endswith("/") and not keep_as_is:
+                request.path_info = request.path = f"{request.path}/"
+            return get_response(request)
 
     return middleware

@@ -273,7 +273,7 @@ async def delete_collection(
 class DocumentIn(Schema):
     name: str
     metadata: dict = Field(default_factory=dict)
-    collection: str = Field(
+    collection_name: str = Field(
         "default collection",
         description="""The name of the collection to which the document belongs. If not provided, the document will be added to the default collection. Use 'all' to access all collections belonging to the user.""",
     )
@@ -305,19 +305,11 @@ class DocumentOut(Schema):
     collection_name: str
     pages: Optional[List[PageOut]] = None
 
-    @model_validator(mode="after")
-    def base64_or_url(self) -> Self:
-        if not self.url and not self.base64:
-            raise ValueError("Either 'url' or 'base64' must be provided.")
-        if self.url and self.base64:
-            raise ValueError("Only one of 'url' or 'base64' should be provided.")
-        return self
-
 
 class DocumentInPatch(Schema):
     name: Optional[str] = None
     metadata: Optional[dict] = Field(default_factory=dict)
-    collection: Optional[str] = Field(
+    collection_name: Optional[str] = Field(
         "default collection",
         description="""The name of the collection to which the document belongs. If not provided, the document will be added to the default collection. Use 'all' to access all collections belonging to the user.""",
     )
@@ -371,7 +363,7 @@ async def upsert_document(
     """
     # if the user didn't give a collection, payload.collection will be "default collection"
     collection, _ = await Collection.objects.aget_or_create(
-        name=payload.collection, owner=request.auth
+        name=payload.collection_name, owner=request.auth
     )
     url = payload.url or ""
     base64 = payload.base64 or ""
@@ -608,7 +600,7 @@ async def partial_update_document(
     Raises:
         HTTPException: If the document is not found or the user is not authorized to update it.
     """
-    collection_name = payload.collection
+    collection_name = payload.collection_name
     try:
         query = Document.objects.select_related("collection")
         if collection_name == "all":
@@ -767,21 +759,9 @@ class QueryFilter(Schema):
 
 class QueryIn(Schema):
     query: str
-    collection_id: Optional[int] = None
+    collection_name: Optional[str] = "default collection"
     top_k: Optional[int] = 3
     query_filter: Optional[QueryFilter] = None
-
-    # query_filter should look like this: {"on": "document or collection", "key": "key", "value": "value"}
-    # this is transformed as such .filter(metadata__contains={"breed": "collie"})
-    # validation: if a collection_id is provided, query_filter "on" must be "document" or query_filter must be None
-    @model_validator(mode="after")
-    def validate_query_filter(self) -> Self:
-        if self.collection_id and self.query_filter:
-            if self.query_filter.on == "collection":
-                raise ValueError(
-                    "If a collection_id is provided, the query_filter must be on 'document'."
-                )
-        return self
 
 
 class PageOutQuery(Schema):
@@ -819,6 +799,20 @@ async def search(request: Request, payload: QueryIn) -> QueryOut:
 
     Raises:
         HttpError: If the collection does not exist or the query is invalid.
+
+    Example:
+        POST /search/
+        {
+            "query": "dog",
+            "collection_name": "my_collection",
+            "top_k": 3,
+            "query_filter": {
+                "on": "document",
+                "key": "breed",
+                "value": "collie",
+                "lookup": "contains"
+            }
+        }
     """
     query_embeddings = await get_query_embeddings(payload.query)
 
@@ -910,10 +904,13 @@ async def get_query_embeddings(query: str) -> List:
 
 async def filter_query(payload: QueryIn, user: CustomUser) -> QuerySet[Page]:
     base_query = Page.objects.select_related("document__collection")
-    if payload.collection_id:
-        base_query = base_query.filter(document__collection_id=payload.collection_id)
-    else:
+    if payload.collection_name == "all":
         base_query = base_query.filter(document__collection__owner=user)
+    else:
+        base_query = base_query.filter(
+            document__collection__owner=user,
+            document__collection__name=payload.collection_name,
+        )
 
     if payload.query_filter:
         on = payload.query_filter.on
