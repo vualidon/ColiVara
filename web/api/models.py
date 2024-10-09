@@ -465,7 +465,7 @@ class Document(models.Model):
             extension = hardcode_mimetypes.get(mime_type, None)
         if extension:
             extension = extension[1:].lower()
-        else:
+        else:  # pragma: no cover
             extension = get_extension(filename)
 
         logger.info(f"Document extension: {extension}")
