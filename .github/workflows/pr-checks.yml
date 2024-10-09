@@ -23,12 +23,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.in
 
-      - name: Setup env
-        working-directory: ./web
-        run: |
-          echo "EMBEDDINGS_URL=${{ secrets.EMBEDDINGS_URL }}" >> .env.dev
-          echo "EMBEDDINGS_URL_TOKEN=${{ secrets.EMBEDDINGS_URL_TOKEN }}" >> .env.dev
-
       - name: Run mypy
         working-directory: ./web
+        env:
+          EMBEDDINGS_URL: ${{ secrets.EMBEDDINGS_URL }}
+          EMBEDDINGS_URL_TOKEN: ${{ secrets.EMBEDDINGS_URL_TOKEN }}
         run: mypy .
