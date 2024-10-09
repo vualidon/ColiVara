@@ -493,11 +493,8 @@ class Document(models.Model):
 
         # here all documents are converted to pdf
         # Step 3: Turn the PDF into images via pdf2image
-        try:
-            images = convert_from_bytes(pdf_data)
-            logger.info(f"Successfully converted PDF to {len(images)} images.")
-        except Exception as e:
-            raise ValidationError(f"Failed to convert PDF to images: {str(e)}")
+        images = convert_from_bytes(pdf_data)
+        logger.info(f"Successfully converted PDF to {len(images)} images.")
 
         # here all documents are converted to images
         # Step 4: Turn the images into base64 strings

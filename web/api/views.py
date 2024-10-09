@@ -912,7 +912,6 @@ async def get_query_embeddings(query: str) -> List:
             # returning  a dynamic array of embeddings, each of which is a list of 128 floats
             # example: [[0.1, 0.2, 0.3, ...], [0.4, 0.5, 0.6, ...]]
             return out["output"]["data"][0]["embedding"]
-    return []
 
 
 async def filter_query(payload: QueryIn, user: CustomUser) -> QuerySet[Page]:

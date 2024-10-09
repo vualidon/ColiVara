@@ -6,6 +6,7 @@ from accounts.models import CustomUser
 from api.middleware import add_slash
 from api.models import Collection, Document, Page, PageEmbedding
 from api.views import Bearer, QueryFilter, QueryIn, filter_query, router
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from ninja.testing import TestAsyncClient
 from pydantic import ValidationError
@@ -675,7 +676,7 @@ async def test_patch_document_no_data_to_update(
 
 async def test_delete_document(async_client, user, collection, document):
     response = await async_client.delete(
-        f"/documents/delete-document/{document.name}/?collection_name=all",
+        f"/documents/delete-document/{document.name}/?collection_name={collection.name}",
         headers={"Authorization": f"Bearer {user.token}"},
     )
     assert response.status_code == 204
@@ -1277,3 +1278,75 @@ async def test_document_file_too_big(async_client, user):
 
         # Assert that the response status code reflects the failure
         assert response.status_code == 400
+
+
+async def test_gotenberg_service_down(async_client, user):
+    GOTENBERG_POST_PATH = "api.models.aiohttp.ClientSession.post"
+    # Create a mock response object with status 500
+    mock_response = AsyncMock()
+    mock_response.status = 500
+    mock_response.json.return_value = AsyncMock(return_value={"error": "Service Down"})
+    # Mock the context manager __aenter__ to return the mock_response
+    mock_response.__aenter__.return_value = mock_response
+    # Patch the aiohttp.ClientSession.post method to return the mock_response
+
+    # we will use a sample docx to force the gotenberg service to fail
+    with open("api/tests/test_docs/sample.docx", "rb") as f:
+        # convert the file to base64
+        base64_string = base64.b64encode(f.read()).decode("utf-8")
+
+    with patch(GOTENBERG_POST_PATH, return_value=mock_response):
+        response = await async_client.post(
+            "/documents/upsert-document/",
+            json={
+                "name": "Test Document Fixture",
+                "base64": base64_string,
+            },
+            headers={"Authorization": f"Bearer {user.token}"},
+        )
+        assert response.status_code == 400
+
+    # now we will use a url
+    with patch(GOTENBERG_POST_PATH, return_value=mock_response):
+        response = await async_client.post(
+            "/documents/upsert-document/",
+            json={
+                "name": "Test Document Fixture",
+                "url": "https://gotenberg.dev/docs/getting-started/introduction",
+            },
+            headers={"Authorization": f"Bearer {user.token}"},
+        )
+        assert response.status_code == 400
+
+
+async def test_prep_document_bad_base64_string():
+    # Initialize Document with bad base64 string
+    doc = Document(base64="bad_base64_string")
+
+    # Attempt to prepare the document and expect a ValidationError
+    with pytest.raises(DjangoValidationError):
+        await doc._prep_document()
+
+
+async def test_prep_document_document_data_too_large():
+    # Initialize Document without a URL or base64 (assuming document_data is handled internally)
+    doc = Document()
+
+    document_data = b"x" * (51 * 1024 * 1024)  # 51 MB
+
+    # Attempt to prepare the document and expect a ValidationError
+    with pytest.raises(DjangoValidationError):
+        await doc._prep_document(document_data=document_data)
+
+
+async def test_prep_document_with_disallowed_extension():
+    content = "bad base64 string"
+    content_bytes = content.encode("utf-8")
+    base64_bytes = base64.b64encode(content_bytes)
+    base64_string = base64_bytes.decode("utf-8")
+    # give it an .exe extension
+    extension = "exe"
+    bad_base64 = f"data:application/{extension};base64,{base64_string}"
+    doc = Document(base64=bad_base64)
+    with pytest.raises(DjangoValidationError):
+        await doc._prep_document()
