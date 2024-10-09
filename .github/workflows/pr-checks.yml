@@ -12,21 +12,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
-
-      - name: Cache Docker layers
-        uses: actions/cache@v2
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-
+          python-version: "3.12"
 
-      - name: Build and start Docker containers
+      - name: Install dependencies
         run: |
-          docker-compose build
-          docker-compose up -d
+          python -m pip install --upgrade pip
+          pip install -r web/requirements.in
 
       - name: Run mypy
-        run: docker-compose exec -T web mypy .
+        run: mypy .
