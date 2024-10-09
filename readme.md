@@ -1,6 +1,6 @@
-## PaliAPI
+## ColiVara = COntextualized Late Interaction Vision Augmented Retrieval API
 
-A document retrieval API with ColiPali as the backend.
+A document retrieval API with ColQwen as the backend.
 
 Components:
 
@@ -33,7 +33,6 @@ You can import an openAPI spec (for example for Postman) from the swagger docume
 
 1.  Python SDK for the API
 2.  Documentation for the API
-3.  Quality of life improvements for the API (Collection name instead of ID, wait for embeddings vs return immediately)
 
 ## Roadmap for 2.0 Release
 
@@ -72,7 +71,7 @@ user = CustomUser.objects.first().token # save this token somewhere (I will make
 
 4. Application will be running at http://localhost:8001 and the swagger documentation at http://localhost:8001/v1/docs
 
-5. To run tests - we have 93% test coverage
+5. To run tests - we have 94% test coverage
 
 ```
 docker-compose exec web pytest

@@ -2,19 +2,21 @@
 from allauth.account.decorators import secure_admin_login
 from django.contrib import admin
 from django.http import HttpResponse
-from django.urls import include, path
+from django.urls import include, path, reverse
 from ninja import NinjaAPI
 
 
 # dummy view at home that return a simple response
 def home(request):
-    return HttpResponse("Your Installation is Successful!")
+    return HttpResponse(
+        f"Your Installation is Successful! <p> <a href='{reverse('api-1.0.0:openapi-view')}'>Go to Docs</a> </p>"
+    )
 
 
 api = NinjaAPI(
     title="PaliAPI",
     version="1.0.0",
-    description="PaliAPI is a ColiPali based Retrieval Augmented Generation (RAG) API",
+    description="PaliAPI is a ColiPali based Vision Augmented Retrieval (VAR) API",
 )
 api.add_router("", "api.views.router")
 

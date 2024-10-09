@@ -1,20 +1,18 @@
 import base64
 import logging
 from enum import Enum
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import aiohttp
 from accounts.models import CustomUser
 from django.conf import settings
 from django.contrib.postgres.aggregates import ArrayAgg
 from django.core.exceptions import ValidationError
-from django.db.models import Count
+from django.db.models import Count, Prefetch
 from django.db.models.query import QuerySet
 from django.db.utils import IntegrityError
 from django.http.request import HttpRequest
-from django.shortcuts import aget_object_or_404
 from ninja import File, Router, Schema
-from ninja.errors import HttpError
 from ninja.files import UploadedFile
 from ninja.security import HttpBearer
 from pgvector.utils import HalfVector
@@ -29,7 +27,7 @@ router = Router()
 logger = logging.getLogger(__name__)
 
 
-@router.get("/health", tags=["health"])
+@router.get("/health/", tags=["health"])
 async def health(request) -> Dict[str, str]:
     return {"status": "ok"}
 
@@ -72,6 +70,12 @@ class CollectionIn(Schema):
     name: str
     metadata: Optional[dict] = {}
 
+    @model_validator(mode="after")
+    def validate_name(self) -> Self:
+        if self.name.lower() == "all":
+            raise ValueError("Collection name 'all' is not allowed.")
+        return self
+
 
 class CollectionOut(Schema):
     id: int
@@ -79,10 +83,19 @@ class CollectionOut(Schema):
     metadata: dict
 
 
-@router.post("/collections", tags=["collections"], auth=Bearer())
+class GenericError(Schema):
+    detail: str
+
+
+@router.post(
+    "/collections/",
+    tags=["collections"],
+    auth=Bearer(),
+    response={201: CollectionOut, 409: GenericError},
+)
 async def create_collection(
     request: Request, payload: CollectionIn
-) -> Dict[str, Union[int, str]]:
+) -> Tuple[int, CollectionOut] | Tuple[int, GenericError]:
     """
     Create a new collection.
 
@@ -102,16 +115,17 @@ async def create_collection(
         collection = await Collection.objects.acreate(
             name=payload.name, owner=request.auth, metadata=payload.metadata
         )
-        return {"id": collection.id, "message": "Collection created successfully"}
+        return 201, CollectionOut(
+            id=collection.id, name=collection.name, metadata=collection.metadata
+        )
     except IntegrityError:
-        raise HttpError(
-            409,
-            "You already have a collection with this name, did you mean to update it? Use PATCH instead.",
+        return 409, GenericError(
+            detail="You already have a collection with this name, did you mean to update it? Use PATCH instead."
         )
 
 
 @router.get(
-    "/collections", response=List[CollectionOut], tags=["collections"], auth=Bearer()
+    "/collections/", response=List[CollectionOut], tags=["collections"], auth=Bearer()
 )
 async def list_collections(request: Request) -> List[CollectionOut]:
     """
@@ -128,25 +142,28 @@ async def list_collections(request: Request) -> List[CollectionOut]:
     Raises:
         HTTPException: If there is an issue with the request or authentication.
     """
-    collections = []
-    async for c in Collection.objects.filter(owner=request.auth):
-        collections.append(CollectionOut(id=c.id, name=c.name, metadata=c.metadata))
+    collections = [
+        CollectionOut(id=c.id, name=c.name, metadata=c.metadata)
+        async for c in Collection.objects.filter(owner=request.auth)
+    ]
     return collections
 
 
 @router.get(
-    "/collections/{collection_id}",
-    response=CollectionOut,
+    "/collections/{collection_name}/",
+    response={200: CollectionOut, 404: GenericError},
     tags=["collections"],
     auth=Bearer(),
 )
-async def get_collection(request: Request, collection_id: int) -> CollectionOut:
+async def get_collection(
+    request: Request, collection_name: str
+) -> Tuple[int, CollectionOut] | Tuple[int, GenericError]:
     """
-    Retrieve a collection by its ID.
+    Retrieve a collection by its name.
 
     Args:
         request: The request object containing authentication information.
-        collection_id (int): The ID of the collection to retrieve.
+        collection_name (str): The name of the collection to retrieve.
 
     Returns:
         CollectionOut: The retrieved collection with its ID, name, and metadata.
@@ -155,7 +172,7 @@ async def get_collection(request: Request, collection_id: int) -> CollectionOut:
         HTTPException: If the collection is not found or the user is not authorized to access it.
 
     Endpoint:
-        GET /collections/{collection_id}
+        GET /collections/{collection_name}
 
     Tags:
         collections
@@ -163,18 +180,26 @@ async def get_collection(request: Request, collection_id: int) -> CollectionOut:
     Authentication:
         Bearer token required.
     """
-    collection = await aget_object_or_404(
-        Collection, id=collection_id, owner=request.auth
-    )
-    return CollectionOut(
-        id=collection.id, name=collection.name, metadata=collection.metadata
-    )
+    try:
+        collection = await Collection.objects.aget(
+            name=collection_name, owner=request.auth
+        )
+        return 200, CollectionOut(
+            id=collection.id, name=collection.name, metadata=collection.metadata
+        )
+    except Collection.DoesNotExist:
+        return 404, GenericError(detail=f"Collection: {collection_name} doesn't exist")
 
 
-@router.patch("/collections/{collection_id}", tags=["collections"], auth=Bearer())
+@router.patch(
+    "/collections/{collection_name}/",
+    tags=["collections"],
+    auth=Bearer(),
+    response={200: CollectionOut, 404: GenericError},
+)
 async def partial_update_collection(
-    request: Request, collection_id: int, payload: CollectionIn
-) -> Dict[str, str]:
+    request: Request, collection_name: str, payload: CollectionIn
+) -> Tuple[int, CollectionOut] | Tuple[int, GenericError]:
     """
     Partially update a collection.
 
@@ -182,7 +207,7 @@ async def partial_update_collection(
 
     Args:
         request: The request object containing authentication details.
-        collection_id (int): The ID of the collection to be updated.
+        collection_name (str): The name of the collection to be updated.
         payload (CollectionIn): The payload containing the fields to be updated.
 
     Returns:
@@ -191,21 +216,34 @@ async def partial_update_collection(
     Raises:
         HTTPException: If the collection is not found or the user is not authorized to update it.
     """
-    collection = await aget_object_or_404(
-        Collection, id=collection_id, owner=request.auth
-    )
+    try:
+        collection = await Collection.objects.aget(
+            name=collection_name, owner=request.auth
+        )
+    except Collection.DoesNotExist:
+        return 404, GenericError(detail=f"Collection: {collection_name} doesn't exist")
+
     collection.name = payload.name or collection.name
     collection.metadata = payload.metadata or collection.metadata
     await collection.asave()
-    return {"message": "Collection updated successfully"}
+    return 200, CollectionOut(
+        id=collection.id, name=collection.name, metadata=collection.metadata
+    )
 
 
-@router.delete("/collections/{collection_id}", tags=["collections"], auth=Bearer())
-async def delete_collection(request: Request, collection_id: int) -> Dict[str, str]:
+@router.delete(
+    "/collections/{collection_name}/",
+    tags=["collections"],
+    auth=Bearer(),
+    response={204: None, 404: GenericError},
+)
+async def delete_collection(
+    request: Request, collection_name: str
+) -> Tuple[int, None] | Tuple[int, GenericError]:
     """
-    Delete a collection by its ID.
+    Delete a collection by its name.
 
-    This endpoint deletes a collection specified by the `collection_id` parameter.
+    This endpoint deletes a collection specified by the `collection_name` parameter.
     The collection must belong to the authenticated user.
 
     Args:
@@ -218,11 +256,15 @@ async def delete_collection(request: Request, collection_id: int) -> Dict[str, s
     Raises:
         HTTPException: If the collection does not exist or does not belong to the authenticated user.
     """
-    collection = await aget_object_or_404(
-        Collection, id=collection_id, owner=request.auth
-    )
+    try:
+        collection = await Collection.objects.aget(
+            name=collection_name, owner=request.auth
+        )
+    except Collection.DoesNotExist:
+        return 404, GenericError(detail=f"Collection: {collection_name} doesn't exist")
+
     await collection.adelete()
-    return {"message": "Collection deleted successfully"}
+    return 204, None
 
 
 """Documents"""
@@ -231,6 +273,10 @@ async def delete_collection(request: Request, collection_id: int) -> Dict[str, s
 class DocumentIn(Schema):
     name: str
     metadata: dict = Field(default_factory=dict)
+    collection_name: str = Field(
+        "default collection",
+        description="""The name of the collection to which the document belongs. If not provided, the document will be added to the default collection. Use 'all' to access all collections belonging to the user.""",
+    )
     url: Optional[str] = None
     base64: Optional[str] = None
 
@@ -259,18 +305,14 @@ class DocumentOut(Schema):
     collection_name: str
     pages: Optional[List[PageOut]] = None
 
-    @model_validator(mode="after")
-    def base64_or_url(self) -> Self:
-        if not self.url and not self.base64:
-            raise ValueError("Either 'url' or 'base64' must be provided.")
-        if self.url and self.base64:
-            raise ValueError("Only one of 'url' or 'base64' should be provided.")
-        return self
-
 
 class DocumentInPatch(Schema):
     name: Optional[str] = None
     metadata: Optional[dict] = Field(default_factory=dict)
+    collection_name: Optional[str] = Field(
+        "default collection",
+        description="""The name of the collection to which the document belongs. If not provided, the document will be added to the default collection. Use 'all' to access all collections belonging to the user.""",
+    )
     url: Optional[str] = None
     base64: Optional[str] = None
 
@@ -283,29 +325,49 @@ class DocumentInPatch(Schema):
         return self
 
 
-@router.post("/collections/{collection_id}/document", tags=["documents"], auth=Bearer())
+@router.post(
+    "/documents/upsert-document/",
+    tags=["documents"],
+    auth=Bearer(),
+    response={201: DocumentOut, 400: GenericError},
+)
 async def upsert_document(
-    request: Request, collection_id: int, payload: DocumentIn
-) -> Dict[str, Union[int, str]]:
+    request: Request, payload: DocumentIn
+) -> Tuple[int, DocumentOut] | Tuple[int, GenericError]:
     """
     Create or update a document in a collection. Average latency is 7 seconds per page.
 
     This endpoint allows the user to create or update a document in a collection.
     The document can be provided as a URL or a base64-encoded string.
+    if the collection is not provided, a collection named "default collection" will be used.
+    if the collection is provided, it will be created if it does not exist.
 
     Args:
         request: The HTTP request object, which includes the user information.
-        collection_id (int): The ID of the collection where the document should be created or updated.
         payload (DocumentIn): The input data for creating or updating the document.
 
     Returns:
-        dict: A dictionary containing the ID of the document and a success message.
+        DocumentOut: The created or updated document with its details.
 
     Raises:
         HttpError: If the document cannot be created or updated.
+
+    Example:
+        POST /documents/upsert-document/
+        {
+            "name": "my_document",
+            "metadata": {"author": "John Doe"},
+            "collection": "my_collection",
+            "url": "https://example.com/my_document.pdf
+        }
     """
-    collection = await aget_object_or_404(
-        Collection, id=collection_id, owner=request.auth
+    # if the user didn't give a collection, payload.collection will be "default collection"
+    if payload.collection_name == "all":
+        return 400, GenericError(
+            detail="The collection name 'all' is not allowed when inserting or updating a document - only when retrieving. Please provide a valid collection name."
+        )
+    collection, _ = await Collection.objects.aget_or_create(
+        name=payload.collection_name, owner=request.auth
     )
     url = payload.url or ""
     base64 = payload.base64 or ""
@@ -341,27 +403,46 @@ async def upsert_document(
 
         # this method will embed the document and save it to the database
         await document.embed_document()
-        return {"id": document.id, "message": "Document created successfully"}
+        document = (
+            await Document.objects.select_related("collection")
+            .annotate(num_pages=Count("pages"))
+            .aget(
+                id=document.id,
+            )
+        )
+        return 201, DocumentOut(
+            id=document.id,
+            name=document.name,
+            metadata=document.metadata,
+            url=document.url,
+            base64=document.base64,
+            num_pages=document.num_pages,
+            collection_name=document.collection.name,
+        )
     except ValidationError as e:
-        raise HttpError(400, str(e))
+        return 400, GenericError(detail=str(e))
 
 
 @router.get(
-    "/collections/{collection_id}/documents/{document_id}",
+    "documents/{document_name}/",
     tags=["documents"],
     auth=Bearer(),
-    response=DocumentOut,
+    response={200: DocumentOut, 404: GenericError, 409: GenericError},
 )
 async def get_document(
-    request, collection_id: int, document_id: int, expand: Optional[str] = None
-) -> DocumentOut:
+    request: Request,
+    document_name: str,
+    collection_name: Optional[str] = "default collection",
+    expand: Optional[str] = None,
+) -> Tuple[int, DocumentOut] | Tuple[int, GenericError]:
     """
-    Retrieve a specific document from a collection.
+    Retrieve a specific document from the user documents.
+    Default collection is "default collection".
+    To get all documents, use collection_name="all".
 
     Args:
         request: The HTTP request object.
-        collection_id (int): The ID of the collection containing the document.
-        document_id (int): The ID of the document to retrieve.
+        document_name (str): The ID of the document to retrieve.
         expand (Optional[str]): A comma-separated list of fields to expand in the response.
                                 If "pages" is included, the document's pages will be included.
 
@@ -370,14 +451,33 @@ async def get_document(
 
     Raises:
         HTTPException: If the document or collection is not found.
+
+    Example:
+        GET /documents/{document_name}/?collection_name={collection_name}&expand=pages
     """
-    document = await aget_object_or_404(
-        Document.objects.select_related("collection").annotate(
+    try:
+        query = Document.objects.select_related("collection").annotate(
             num_pages=Count("pages")
-        ),
-        id=document_id,
-        collection_id=collection_id,
-    )
+        )
+        if collection_name == "all":
+            document = await query.aget(
+                name=document_name, collection__owner=request.auth
+            )
+        else:
+            document = await query.aget(
+                name=document_name,
+                collection__name=collection_name,
+                collection__owner=request.auth,
+            )
+    except Document.DoesNotExist:
+        return 404, GenericError(
+            detail=f"Document: {document_name} doesn't exist in your collections."
+        )
+    except Document.MultipleObjectsReturned:
+        return 409, GenericError(
+            detail=f"Multiple documents with the name: {document_name} exist in your collections. Please specify a collection."
+        )
+
     document_out = DocumentOut(
         id=document.id,
         name=document.name,
@@ -387,37 +487,40 @@ async def get_document(
         num_pages=document.num_pages,
         collection_name=document.collection.name,
     )
+
     if expand and "pages" in expand.split(","):
-        document_out.pages = []
-        async for page in document.pages.all():
-            document_out.pages.append(
-                PageOut(
-                    document_name=document.name,
-                    img_base64=page.img_base64,
-                    page_number=page.page_number,
-                )
+        document_out.pages = [
+            PageOut(
+                document_name=document.name,
+                img_base64=page.img_base64,
+                page_number=page.page_number,
             )
-    return document_out
+            async for page in document.pages.all()
+        ]
+
+    return 200, document_out
 
 
 @router.get(
-    "/collections/{collection_id}/documents",
+    "/documents/",
     tags=["documents"],
     auth=Bearer(),
     response=List[DocumentOut],
 )
 async def list_documents(
-    request: Request, collection_id: int, expand: Optional[str] = None
+    request: Request,
+    collection_name: Optional[str] = "default collection",
+    expand: Optional[str] = None,
 ) -> List[DocumentOut]:
     """
     Fetch a list of documents for a given collection.
 
-    This endpoint retrieves documents associated with a specified collection ID.
+    This endpoint retrieves documents associated with a specified collection name.
     Optionally, it can expand the response to include pages of each document.
 
     Args:
         request (Request): The request object.
-        collection_id (int): The ID of the collection to fetch documents from.
+        collection_name (Optional[str]): The name of the collection to fetch documents from. Defaults to "default collection". Use "all" to fetch documents from all collections.
         expand (Optional[str]): A comma-separated string specifying additional fields to include in the response.
                                 If "pages" is included, the pages of each document will be included.
 
@@ -428,46 +531,62 @@ async def list_documents(
         HTTPException: If the collection or documents are not found.
 
     Example:
-        GET /collections/1/documents?expand=pages
+        GET /documents/?collection_name=default collection&expand=pages
     """
+    expand_fields = expand.split(",") if expand else []
+
+    query = Document.objects.select_related("collection").annotate(
+        num_pages=Count("pages")
+    )
+
+    if "pages" in expand_fields:
+        query = query.prefetch_related(
+            Prefetch("pages", queryset=Page.objects.order_by("page_number"))
+        )
+
+    if collection_name == "all":
+        query = query.filter(collection__owner=request.auth)
+    else:
+        query = query.filter(
+            collection__name=collection_name, collection__owner=request.auth
+        )
 
     documents = []
-    async for document in (
-        Document.objects.select_related("collection")
-        .annotate(num_pages=Count("pages"))
-        .filter(collection_id=collection_id)
-    ):
-        document_out = DocumentOut(
-            id=document.id,
-            name=document.name,
-            metadata=document.metadata,
-            url=document.url,
-            base64=document.base64,
-            num_pages=document.num_pages,
-            collection_name=document.collection.name,
+    async for doc in query:
+        document = DocumentOut(
+            id=doc.id,
+            name=doc.name,
+            metadata=doc.metadata,
+            url=doc.url,
+            base64=doc.base64,
+            num_pages=doc.num_pages,
+            collection_name=doc.collection.name,
         )
-        if expand and "pages" in expand.split(","):
-            document_out.pages = []
-            async for page in document.pages.all():
-                document_out.pages.append(
-                    PageOut(
-                        document_name=document.name,
-                        img_base64=page.img_base64,
-                        page_number=page.page_number,
-                    )
+
+        if "pages" in expand_fields:
+            document.pages = [
+                PageOut(
+                    document_name=doc.name,
+                    img_base64=page.img_base64,
+                    page_number=page.page_number,
                 )
-        documents.append(document_out)
+                for page in doc.pages.all()
+            ]
+
+        documents.append(document)
+
     return documents
 
 
 @router.patch(
-    "/collections/{collection_id}/documents/{document_id}",
+    "documents/{document_name}/",
     tags=["documents"],
     auth=Bearer(),
+    response={200: DocumentOut, 404: GenericError, 409: GenericError},
 )
 async def partial_update_document(
-    request: Request, collection_id: int, document_id: int, payload: DocumentInPatch
-) -> Dict[str, str]:
+    request: Request, document_name: str, payload: DocumentInPatch
+) -> Tuple[int, DocumentOut] | Tuple[int, GenericError]:
     """
     Partially update a document.
 
@@ -476,72 +595,121 @@ async def partial_update_document(
 
     Args:
         request: The request object containing authentication details.
-        collection_id (int): The ID of the collection to which the document belongs.
-        document_id (int): The ID of the document to be updated.
-        payload (DocumentIn): The payload containing the fields to be updated.
+        document_name (str): The name of the document to be updated.
+        payload (DocumentInPatch): The payload containing the fields to be updated.
 
     Returns:
-        dict: A message indicating the document was updated successfully.
+        Tuple[int, DocumentOut] | Tuple[int, GenericError]: A tuple containing the status code and the updated document or an error message.
 
     Raises:
         HTTPException: If the document is not found or the user is not authorized to update it.
     """
-    document = await aget_object_or_404(
-        Document.objects.select_related("collection"),
-        id=document_id,
-        collection_id=collection_id,
-    )
+    collection_name = payload.collection_name
+    try:
+        query = Document.objects.select_related("collection")
+        if collection_name == "all":
+            document = await query.aget(
+                name=document_name, collection__owner=request.auth
+            )
+        else:
+            document = await query.aget(
+                name=document_name,
+                collection__name=collection_name,
+                collection__owner=request.auth,
+            )
+    except Document.DoesNotExist:
+        return 404, GenericError(
+            detail=f"Document: {document_name} doesn't exist in your collections."
+        )
+    except Document.MultipleObjectsReturned:
+        return 409, GenericError(
+            detail=f"Multiple documents with the name: {document_name} exist in your collections. Please specify a collection."
+        )
+
     if (payload.url and payload.url != document.url) or (
         payload.base64 and payload.base64 != document.base64
     ):
-        # user had base64, but now gave url = delete base64 and embed url
-        # user had url, but now gave base64 = delete url and embed base64
-        # user had url, and now gave new url = embed url. Same url? no change
-        # user had base64, and now gave new base64 = embed base64. Same base64? no change
         document.url = payload.url or ""
         document.base64 = payload.base64 or ""
         document.metadata = payload.metadata or document.metadata
         document.name = payload.name or document.name
+        # we want to delete the old pages, since we will re-embed the document
+        await document.pages.all().adelete()
         await document.embed_document()
     else:
         document.name = payload.name or document.name
         document.metadata = payload.metadata or document.metadata
         await document.asave()
-    return {"message": "Document updated successfully"}
+
+    new_document = (
+        await Document.objects.select_related("collection")
+        .annotate(num_pages=Count("pages"))
+        .aget(id=document.id)
+    )
+    return 200, DocumentOut(
+        id=new_document.id,
+        name=new_document.name,
+        metadata=new_document.metadata,
+        url=new_document.url,
+        base64=new_document.base64,
+        num_pages=new_document.num_pages,
+        collection_name=new_document.collection.name,
+    )
 
 
 @router.delete(
-    "/collections/{collection_id}/documents/{document_id}",
+    "/documents/delete-document/{document_name}/",
     tags=["documents"],
     auth=Bearer(),
+    response={204: None, 404: GenericError, 409: GenericError},
 )
 async def delete_document(
-    request: Request, collection_id: int, document_id: int
-) -> Dict[str, str]:
+    request: Request,
+    document_name: str,
+    collection_name: Optional[str] = "default collection",
+) -> Tuple[int, None] | Tuple[int, GenericError]:
     """
-    Delete a document by its ID.
+    Delete a document by its Name.
 
-    This endpoint deletes a document specified by the `document_id` parameter.
+    This endpoint deletes a document specified by the `document_name` parameter.
     The document must belong to the authenticated user.
 
     Args:
         request: The HTTP request object, which includes authentication information.
-        collection_id (int): The ID of the collection containing the document.
-        document_id (int): The ID of the document to be deleted.
+        collection_name (name): The name of the collection containing the document. Defaults to "default collection". Use "all" to access all collections belonging to the user.
+        document_name (int): The name of the document to be deleted.
 
     Returns:
         dict: A message indicating that the document was deleted successfully.
 
     Raises:
         HTTPException: If the document does not exist or does not belong to the authenticated user.
+
+    Example:
+        DELETE /documents/delete-document/{document_name}/?collection_name={collection_name}
     """
-    document = await aget_object_or_404(
-        Document.objects.select_related("collection"),
-        id=document_id,
-        collection_id=collection_id,
-    )
+    try:
+        query = Document.objects.select_related("collection")
+        if collection_name == "all":
+            document = await query.aget(
+                name=document_name, collection__owner=request.auth
+            )
+        else:
+            document = await query.aget(
+                name=document_name,
+                collection__name=collection_name,
+                collection__owner=request.auth,
+            )
+    except Document.DoesNotExist:
+        return 404, GenericError(
+            detail=f"Document: {document_name} doesn't exist in your collections."
+        )
+    except Document.MultipleObjectsReturned:
+        return 409, GenericError(
+            detail=f"Multiple documents with the name: {document_name} exist in your collections. Please specify a collection"
+        )
     await document.adelete()
-    return {"message": "Document deleted successfully"}
+    return 204, None
 
 
 """ Search """
@@ -584,8 +752,6 @@ class QueryFilter(Schema):
             if self.value is not None:
                 raise ValueError("Value must be None.")
         if self.lookup in ["has_keys", "has_any_keys"]:
-            if isinstance(self.key, str):
-                self.key = [self.key]
             if not isinstance(self.key, list):
                 raise ValueError("Key must be a list of strings.")
             if self.value is not None:
@@ -595,21 +761,9 @@ class QueryFilter(Schema):
 
 class QueryIn(Schema):
     query: str
-    collection_id: Optional[int] = None
+    collection_name: Optional[str] = "default collection"
     top_k: Optional[int] = 3
     query_filter: Optional[QueryFilter] = None
-
-    # query_filter should look like this: {"on": "document or collection", "key": "key", "value": "value"}
-    # this is transformed as such .filter(metadata__contains={"breed": "collie"})
-    # validation: if a collection_id is provided, query_filter "on" must be "document" or query_filter must be None
-    @model_validator(mode="after")
-    def validate_query_filter(self) -> Self:
-        if self.collection_id and self.query_filter:
-            if self.query_filter.on == "collection":
-                raise ValueError(
-                    "If a collection_id is provided, the query_filter must be on 'document'."
-                )
-        return self
 
 
 class PageOutQuery(Schema):
@@ -630,8 +784,15 @@ class QueryOut(Schema):
     results: List[PageOutQuery]
 
 
-@router.post("/search", tags=["search"], auth=Bearer())
-async def search(request: Request, payload: QueryIn) -> QueryOut:
+@router.post(
+    "/search/",
+    tags=["search"],
+    auth=Bearer(),
+    response={200: QueryOut, 503: GenericError},
+)
+async def search(
+    request: Request, payload: QueryIn
+) -> Tuple[int, QueryOut] | Tuple[int, GenericError]:
     """
     Search for pages similar to a given query.
 
@@ -647,9 +808,26 @@ async def search(request: Request, payload: QueryIn) -> QueryOut:
 
     Raises:
         HttpError: If the collection does not exist or the query is invalid.
+
+    Example:
+        POST /search/
+        {
+            "query": "dog",
+            "collection_name": "my_collection",
+            "top_k": 3,
+            "query_filter": {
+                "on": "document",
+                "key": "breed",
+                "value": "collie",
+                "lookup": "contains"
+            }
+        }
     """
     query_embeddings = await get_query_embeddings(payload.query)
-
+    if not query_embeddings:
+        return 503, GenericError(
+            detail="Failed to get embeddings from the embeddings service"
+        )
     query_length = len(query_embeddings)  # we need this for normalization
 
     # we want to cast the embeddings to halfvec
@@ -708,7 +886,7 @@ async def search(request: Request, payload: QueryIn) -> QueryOut:
         )
         async for row in results
     ]
-    return QueryOut(query=payload.query, results=formatted_results)
+    return 200, QueryOut(query=payload.query, results=formatted_results)
 
 
 async def get_query_embeddings(query: str) -> List:
@@ -726,22 +904,25 @@ async def get_query_embeddings(query: str) -> List:
             EMBEDDINGS_URL, json=payload, headers=headers
         ) as response:
             if response.status != 200:
-                raise ValidationError(
-                    "Failed to get embeddings from the embeddings service."
+                logger.error(
+                    f"Failed to get embeddings from the embeddings service: {response.status}"
                 )
+                return []
             out = await response.json()
             # returning  a dynamic array of embeddings, each of which is a list of 128 floats
             # example: [[0.1, 0.2, 0.3, ...], [0.4, 0.5, 0.6, ...]]
             return out["output"]["data"][0]["embedding"]
-    return []
 
 
 async def filter_query(payload: QueryIn, user: CustomUser) -> QuerySet[Page]:
     base_query = Page.objects.select_related("document__collection")
-    if payload.collection_id:
-        base_query = base_query.filter(document__collection_id=payload.collection_id)
-    else:
+    if payload.collection_name == "all":
         base_query = base_query.filter(document__collection__owner=user)
+    else:
+        base_query = base_query.filter(
+            document__collection__owner=user,
+            document__collection__name=payload.collection_name,
+        )
 
     if payload.query_filter:
         on = payload.query_filter.on
@@ -775,7 +956,10 @@ class FileOut(Schema):
 
 
 @router.post(
-    "helpers/file-to-imgbase64", tags=["helpers"], response=List[FileOut], auth=Bearer()
+    "helpers/file-to-imgbase64/",
+    tags=["helpers"],
+    response=List[FileOut],
+    auth=Bearer(),
 )
 async def file_to_imgbase64(request, file: UploadedFile = File(...)) -> List[FileOut]:
     """
@@ -797,7 +981,7 @@ async def file_to_imgbase64(request, file: UploadedFile = File(...)) -> List[Fil
     return results
 
 
-@router.post("helpers/file-to-base64", tags=["helpers"], auth=Bearer())
+@router.post("helpers/file-to-base64/", tags=["helpers"], auth=Bearer())
 async def file_to_base64(request, file: UploadedFile = File(...)) -> Dict[str, str]:
     """
     Upload one file, converts to base64 encoded strings.
@@ -833,8 +1017,15 @@ class EmbeddingsOut(Schema):
     usage: dict
 
 
-@router.post("/embeddings", tags=["embeddings"], auth=Bearer())
-async def embeddings(request: Request, payload: EmbeddingsIn) -> EmbeddingsOut:
+@router.post(
+    "/embeddings/",
+    tags=["embeddings"],
+    auth=Bearer(),
+    response={200: EmbeddingsOut, 503: GenericError},
+)
+async def embeddings(
+    request: Request, payload: EmbeddingsIn
+) -> Tuple[int, EmbeddingsOut] | Tuple[int, GenericError]:
     """
     Embed a list of documents.
 
@@ -866,11 +1057,11 @@ async def embeddings(request: Request, payload: EmbeddingsIn) -> EmbeddingsOut:
             EMBEDDINGS_URL, json=embed_payload, headers=headers
         ) as response:
             if response.status != 200:
-                raise ValidationError(
-                    "Failed to get embeddings from the embeddings service."
+                return 503, GenericError(
+                    detail="Failed to get embeddings from the embeddings service"
                 )
             response_data = await response.json()
             output_data = response_data["output"]
             # change object to _object
             output_data["_object"] = output_data.pop("object")
-            return EmbeddingsOut(**output_data)
+            return 200, EmbeddingsOut(**output_data)

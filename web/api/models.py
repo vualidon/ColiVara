@@ -15,7 +15,7 @@ from accounts.models import CustomUser
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.db.models import FloatField, Func, JSONField
+from django.db.models import FloatField, Func, JSONField, Q
 from django_stubs_ext.db.models import TypedModelMeta
 from pdf2image import convert_from_bytes
 from pgvector.django import HalfVectorField
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 class Collection(models.Model):
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=255, db_index=True)
     owner = models.ForeignKey(
         CustomUser, on_delete=models.CASCADE, related_name="collections"
     )
@@ -40,7 +40,15 @@ class Collection(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=["name", "owner"], name="unique_collection_per_user"
-            )
+            ),
+            # disallow the name "all" for collections
+            models.CheckConstraint(
+                condition=~Q(name="all"), name="collection_name_not_all"
+            ),
+        ]
+
+        indexes = [
+            models.Index(fields=["name", "owner"], name="collection_name_owner_idx")
         ]
 
 
@@ -48,7 +56,7 @@ class Document(models.Model):
     collection = models.ForeignKey(
         Collection, on_delete=models.CASCADE, related_name="documents"
     )
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=255, db_index=True)
     url = models.URLField(blank=True)
     base64 = models.TextField(blank=True)
     metadata = JSONField(default=dict)
@@ -62,6 +70,11 @@ class Document(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=["name", "collection"], name="unique_document_per_collection"
+            )
+        ]
+        indexes = [
+            models.Index(
+                fields=["name", "collection"], name="document_name_collection_idx"
             )
         ]
 
@@ -452,7 +465,7 @@ class Document(models.Model):
             extension = hardcode_mimetypes.get(mime_type, None)
         if extension:
             extension = extension[1:].lower()
-        else:
+        else:  # pragma: no cover
             extension = get_extension(filename)
 
         logger.info(f"Document extension: {extension}")
@@ -480,11 +493,8 @@ class Document(models.Model):
 
         # here all documents are converted to pdf
         # Step 3: Turn the PDF into images via pdf2image
-        try:
-            images = convert_from_bytes(pdf_data)
-            logger.info(f"Successfully converted PDF to {len(images)} images.")
-        except Exception as e:
-            raise ValidationError(f"Failed to convert PDF to images: {str(e)}")
+        images = convert_from_bytes(pdf_data)
+        logger.info(f"Successfully converted PDF to {len(images)} images.")
 
         # here all documents are converted to images
         # Step 4: Turn the images into base64 strings
