@@ -8,7 +8,7 @@ Colivara is a suite of services that allows you to store, search, and retrieve d
 
 - Documents are visually rich structures that convey information through text, as well as tables, figures, page layouts, or fonts. While modern document retrieval systems exhibit strong performance on query-to-text matching, they struggle to exploit visual cues efficiently, hindering their performance on practical document retrieval applications such as Retrieval Augmented Generation.
 
-[Learn More in the ColiPali Paper](https://arxiv.org/abs/2407.01449)
+[Learn More in the ColiPali Paper](https://arxiv.org/abs/2407.01449){:target="\_blank"}
 
 ![ColiPali Explainer](docs/colipali-explainer.jpg)
 
@@ -16,9 +16,9 @@ Colivara is a suite of services that allows you to store, search, and retrieve d
 
 The ColiPali team has provided the following evals in their paper. We have run quick sanity checks on the API and the Embeddings Service and are getting similar results. We are working on own independent evals and will update this section with our results.
 
-![ColiPali Evals](docs/colipali-evals.jpg)
+![ColiPali Evals](docs/colipali-evals.png)
 
-Components:
+**Components**:
 
 1. Postgres DB with pgvector extension for storing embeddings. (This repo)
 2. REST API for CRUD operations on Documents, Collections, and Users. (This repo)
@@ -68,11 +68,11 @@ print(pages) # top 3 pages with the most relevant information
 
 Coming soon...
 
-You can sign up for the waitlist on the [ColiVara Website](https://colivara.com). We will be launching a cloud version of the API soon.
+You can sign up for the waitlist on the [ColiVara Website](https://colivara.com){:target="\_blank"}. We will be launching a cloud version of the API soon.
 
 ### Local Setup:
 
-1. Setup the Embeddings Service (ColiVarE) - This is a separate repo and is required for the API to work. The directions are available here: [ColiVarE](https://github.com/tjmlabs/ColiVarE/blob/main/readme.md)
+1. Setup the Embeddings Service (ColiVarE) - This is a separate repo and is required for the API to work. The directions are available here: [ColiVarE](https://github.com/tjmlabs/ColiVarE/blob/main/readme.md){:target="\_blank"}
 2. Clone this repo and follow the Getting Started section below.
 
 ### Endpoints:
@@ -104,8 +104,7 @@ You can import an openAPI spec (for example for Postman) from the swagger docume
 
 1. Clone the repo
 
-```
-bash
+```bash
 git clone {repo_url}
 ```
 
@@ -118,7 +117,7 @@ EMBEDDINGS_URL_TOKEN="the serverless embeddings service token"  # for local setu
 
 3. Run the following commands:
 
-```
+```bash
 docker-compose up -d --build
 docker-compose exec web python manage.py migrate
 docker-compose exec web python manage.py createsuperuser
@@ -132,13 +131,13 @@ user = CustomUser.objects.first().token # save this token somewhere (I will make
 
 5. To run tests - we have 100% test coverage
 
-```
+```bash
 docker-compose exec web pytest
 ```
 
 6. mypy for type checking
 
-```
+```bash
 docker-compose exec web mypy .
 ```
 
@@ -146,4 +145,4 @@ docker-compose exec web mypy .
 
 This project is licensed under Functional Source License, Version 1.1, Apache 2.0 Future License. See the [LICENSE.md](LICENSE.md) file for details.
 
-For commercial licensing, please contact us at [tjmlabs.com](https://tjmlabs.com). We are happy to work with you to provide a license that meets your needs.
+For commercial licensing, please contact us at [tjmlabs.com](https://tjmlabs.com){:target="\_blank"}. We are happy to work with you to provide a license that meets your needs.
