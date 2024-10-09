@@ -11,12 +11,3 @@ repos:
         stages: [pre-commit]
       - id: ruff-format
         stages: [pre-commit]
-
-  - repo: local
-    hooks:
-      - id: mypy
-        name: mypy
-        entry: bash -c "docker-compose exec -T web mypy ."
-        language: system
-        stages: [pre-commit]
-
