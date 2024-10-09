@@ -1,0 +1,16 @@
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Build and start Docker containers
+        run: docker-compose up -d
+
+      - name: Run Mypy
+        run: docker-compose exec -T web mypy .

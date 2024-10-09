@@ -1,60 +1,119 @@
 ## ColiVara = COntextualized Late Interaction Vision Augmented Retrieval API
 
-A document retrieval API with ColQwen as the backend.
+**State of The Art Retrieval, One line of Code**
+
+Colivara is a suite of services that allows you to store, search, and retrieve documents based on their visual embeddings. It is a web-first implementation of the ColiPali paper using ColQwen2 as backend model. It works exacly like RAG from the end-user standpoint - but using vision models instead of chunking and text-processing for documents.
+
+**Problem**:
+
+- Documents are visually rich structures that convey information through text, as well as tables, figures, page layouts, or fonts. While modern document retrieval systems exhibit strong performance on query-to-text matching, they struggle to exploit visual cues efficiently, hindering their performance on practical document retrieval applications such as Retrieval Augmented Generation.
+
+[Learn More in the ColiPali Paper](https://arxiv.org/abs/2407.01449)
+
+![ColiPali Explainer](docs/colipali-explainer.jpg)
+
+**Evals**:
+
+The ColiPali team has provided the following evals in their paper. We have run quick sanity checks on the API and the Embeddings Service and are getting similar results. We are working on own independent evals and will update this section with our results.
+
+![ColiPali Evals](docs/colipali-evals.jpg)
 
 Components:
 
-1. Postgres DB with pgvector extension for storing embeddings.
-2. REST API for CRUD operations on collections and documents
-3. Embeddings Service. This needs a GPU with at least 8gb VRAM. The code is under `embeddings` directory and is optimized for a serverless GPU workload.
-   > You can run the embedding service on your own GPU via `the docker-compose-local.yml` with all the other services (in a VPS or locally) - however, it is not comprehensively tested and is not recommended for production.
+1. Postgres DB with pgvector extension for storing embeddings. (This repo)
+2. REST API for CRUD operations on Documents, Collections, and Users. (This repo)
+3. Embeddings Service. This needs a GPU with at least 8gb VRAM. The code is under `ColiVarE` repo and is optimized for a serverless GPU workload.
 
-### Models:
+   > You can run the embedding service seperately and use your own storage and API for the rest of the components. The Embedding service is designed to be modular and can be used with any storage and API. (For example, if you want to use QDrant for storage and Node for the API)
 
-- **User**: Represents an individual user.
-- **Collection**: Represents a collection of documents, owned by a user.
-- **Document**: Each document belongs to a specific collection.
-- **Page**: Each page belongs to a specific document and contains the embeddings.
-- **PageEmbedding**: Represents the embeddings of a page.
+4. Python SDK for the API (Coming Soon)
+
+### Quick Usage:
+
+1. Index a document:
+
+```python
+import requests
+
+url = "<service_url>/v1/documents/upsert-document/"
+
+payload = {
+    "name": "Attention Is All You Need",
+    "url": "https://arxiv.org/abs/1706.03762",
+}
+headers = {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer <token>"
+}
+
+response = requests.post(url, json=payload, headers=headers)
+```
+
+2. Search for a document:
+
+```python
+import requests
+url = "<service_url>/v1/search/"
+payload = {"query": "What is the attention mechanism in transformers?"}
+headers = {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer <token>"
+}
+response = requests.post(url, json=payload, headers=headers)
+pages = response.json()
+print(pages) # top 3 pages with the most relevant information
+```
+
+### Cloud Quickstart:
+
+Coming soon...
+
+You can sign up for the waitlist on the [ColiVara Website](https://colivara.com). We will be launching a cloud version of the API soon.
+
+### Local Setup:
+
+1. Setup the Embeddings Service (ColiVarE) - This is a separate repo and is required for the API to work. The directions are available here: [ColiVarE](https://github.com/tjmlabs/ColiVarE/blob/main/readme.md)
+2. Clone this repo and follow the Getting Started section below.
 
 ### Endpoints:
 
-Please check swagger documentation endpoint (v1/docs) for rest of endpoints. Typical flow
+Please check swagger documentation endpoint (v1/docs) for endpoints. More comprehensive documentation is being worked on. Features include:
 
-1. Create empty collection with metadata via Create Collection endpoint
-2. Add documents to the collection with metadata Via Create Document endpoint
-3. Search for documents in the collection via Search endpoint with Query and optional filtering. You will get back top k(3) pages with document and collection details.
-
-There is endpoints for updating and deleting collections and documents as well.
+1. Multi-users setup with each user having their own collections
+2. A user may have multiple collections. For example, a user may have a collection for research papers and another for books.
+3. Each collection can have multiple documents.
+4. Filtering for collections and documents on arbitrary metadata fields. For example, you can filter documents by author or year.
+5. Opinionated and optimized defaults. For example, you can simply hit the upsert endpoint and the API will automatically will extract the text and visual embeddings from the document and store it in the database under a default collection.
+6. HalfVecs implementation for faster search and reduced storage requirements.
+7. Full CRUD operations for documents, collections, and users.
 
 You can import an openAPI spec (for example for Postman) from the swagger documentation endpoint at `v1/docs/openapi.json`
 
 ## Roadmap for 1.0 Release
 
 1.  Python SDK for the API
-2.  Documentation for the API
+2.  Complete Documentation for the API
 
 ## Roadmap for 2.0 Release
 
-1. Evals for quality + latency
-2. Demo
+1. Independent Evals for quality + latency
+2. Full Demo with Generative Models
 3. Typescript SDK
 
-## Wishlist
-
-1. Typescript SDK for the API
-2. Consistent/reliable Evals
-
-## Getting Started
+## Getting Started (Local Setup)
 
 1. Clone the repo
-2. Create a .env.dev file in the root directory with the following variables:
-
-(Note: a guide on how to host the Embeddings Service will be provided in the future)
 
 ```
-EMBEDDINGS_URL="the serverless embeddings service url"
-EMBEDDINGS_URL_TOKEN="the serverless embeddings service token"
+bash
+git clone {repo_url}
+```
+
+2. Create a .env.dev file in the root directory with the following variables:
+
+```
+EMBEDDINGS_URL="the serverless embeddings service url" # for local setup use http://localhost:8000/runsync/
+EMBEDDINGS_URL_TOKEN="the serverless embeddings service token"  # for local setup use any string will do.
 ```
 
 3. Run the following commands:
@@ -71,7 +130,7 @@ user = CustomUser.objects.first().token # save this token somewhere (I will make
 
 4. Application will be running at http://localhost:8001 and the swagger documentation at http://localhost:8001/v1/docs
 
-5. To run tests - we have 94% test coverage
+5. To run tests - we have 100% test coverage
 
 ```
 docker-compose exec web pytest
@@ -83,49 +142,8 @@ docker-compose exec web pytest
 docker-compose exec web mypy .
 ```
 
-7. We use ruff as linter and formatting. Eventaully will setup pre-commit hooks for this.
+## License
 
-## LOCAL GPU
+This project is licensed under Functional Source License, Version 1.1, Apache 2.0 Future License. See the [LICENSE.md](LICENSE.md) file for details.
 
-Tested on Windows 11 with RTX 3090 TI (8g VRAM) on WSL2 backend running Ubuntu 24.04 LTS as the default WSL distr.
-
-1. Make sure you can access your GPUs via running (adjust the version as needed depending on your CUDA and Ubuntu version):
-
-`docker run -it --gpus=all --rm nvidia/cuda:12.6.1-cudnn-runtime-ubuntu24.04 nvidia-smi`
-
-The nvidia-smi utility allows users to query information on the accessible devices. If it worked, you are in luck. Otherwise, you will have to debug and fix the erros, which are specific to your machine and setup.
-
-Here some helpful information to help you debug. Please note - local installation are highly-specific per machine and setup and generally not reproducible. How to enable GPU access in your WSL2 is outside the scope of this repo and not something we can help with.
-
-1. Upgrade your Nvidia drivers from here: https://www.nvidia.com/Download/index.aspx
-
-2. Install CUDA toolkit in WSL2: https://developer.nvidia.com/cuda-downloads?target_os=Linux&target_arch=x86_64&Distribution=WSL-Ubuntu&target_version=2.0&target_type=deb_local
-
-```
-wget https://developer.download.nvidia.com/compute/cuda/repos/wsl-ubuntu/x86_64/cuda-wsl-ubuntu.pin
-sudo mv cuda-wsl-ubuntu.pin /etc/apt/preferences.d/cuda-repository-pin-600
-wget https://developer.download.nvidia.com/compute/cuda/12.6.1/local_installers/cuda-repo-wsl-ubuntu-12-6-local_12.6.1-1_amd64.deb
-sudo dpkg -i cuda-repo-wsl-ubuntu-12-6-local_12.6.1-1_amd64.deb
-sudo cp /var/cuda-repo-wsl-ubuntu-12-6-local/cuda-*-keyring.gpg /usr/share/keyrings/
-sudo apt-get update
-sudo apt-get -y install cuda-toolkit-12-6
-```
-
-3. Install NVIDIA Container Toolkit: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html#installing-the-nvidia-container-toolkit
-
-```
-curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg \
-  && curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
-    sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
-    sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
-
-sed -i -e '/experimental/ s/^#//g' /etc/apt/sources.list.d/nvidia-container-toolkit.list
-
-sudo apt-get install -y nvidia-container-toolkit
-sudo nvidia-ctk runtime configure --runtime=docker
-sudo systemctl restart docker
-```
-
-This direction are largely the same whether you are doing a Ubuntu inside WSL or a Ubuntu somewhere else (VPS) - and should work in production if you decide to go this route (we do not recommend). Check the links as some of the commands might have changed and are different for different versions of CUDA and Ubuntu.
-
-We do not recommend this setup in production, as it doesn't scale well and you will be scaling expensive GPU servers to handle CRUD operations on the database. We recommend using a serverless GPU service like Lambda or Runpod (what we are using in production) for the embeddings service.
+For commercial licensing, please contact us at [tjmlabs.com](https://tjmlabs.com). We are happy to work with you to provide a license that meets your needs.
