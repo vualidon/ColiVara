@@ -8,6 +8,23 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: test_db
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      gotenberg:
+        image: gotenberg/gotenberg:8
 
     steps:
       - uses: actions/checkout@v4
@@ -23,6 +40,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.in
 
+      - name: Run migrations
+        working-directory: ./web
+        env:
+          DATABASE_URL: postgres://test_user:test_password@localhost:5432/test_db
+          EMBEDDINGS_URL: ${{ secrets.EMBEDDINGS_URL }}
+          EMBEDDINGS_URL_TOKEN: ${{ secrets.EMBEDDINGS_URL_TOKEN }}
+        run: python manage.py migrate
+
       - name: Run mypy
         working-directory: ./web
         env:
@@ -35,6 +60,7 @@ jobs:
         env:
           EMBEDDINGS_URL: ${{ secrets.EMBEDDINGS_URL }}
           EMBEDDINGS_URL_TOKEN: ${{ secrets.EMBEDDINGS_URL_TOKEN }}
+          DATABASE_URL: postgres://test_user:test_password@localhost:5432/test_db
         run: pytest
 
       - name: Upload coverage to Codecov
