@@ -28,7 +28,7 @@ jobs:
         ports:
           - 3000:3000
         options: >-
-          --health-cmd "curl -f http://gotenberg:3000/health"
+          --health-cmd "curl -f http://localhost:3000/health"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -61,6 +61,7 @@ jobs:
         env:
           EMBEDDINGS_URL: ${{ secrets.EMBEDDINGS_URL }}
           EMBEDDINGS_URL_TOKEN: ${{ secrets.EMBEDDINGS_URL_TOKEN }}
+          GOTENBERG_URL: http://localhost:3000
         run: mypy .
 
       - name: Run tests
@@ -69,6 +70,7 @@ jobs:
           EMBEDDINGS_URL: ${{ secrets.EMBEDDINGS_URL }}
           EMBEDDINGS_URL_TOKEN: ${{ secrets.EMBEDDINGS_URL_TOKEN }}
           DATABASE_URL: postgres://test_user:test_password@localhost:5432/test_db
+          GOTENBERG_URL: http://localhost:3000
         run: pytest
 
       - name: Upload coverage to Codecov
