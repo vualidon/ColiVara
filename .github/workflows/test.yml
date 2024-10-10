@@ -27,6 +27,11 @@ jobs:
         image: gotenberg/gotenberg:8
         ports:
           - 3000:3000
+        options: >-
+          --health-cmd "curl -f http://gotenberg:3000/health"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - uses: actions/checkout@v4
