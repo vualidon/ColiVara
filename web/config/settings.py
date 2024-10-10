@@ -43,6 +43,8 @@ INSTALLED_APPS = [
     "allauth.socialaccount",
     "allauth.socialaccount.providers.google",
     "allauth.socialaccount.providers.github",
+    # corsheaders
+    "corsheaders",
     # local
     "accounts",
     "api",
@@ -73,6 +75,7 @@ MIDDLEWARE = [
     "servestatic.middleware.ServeStaticMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "api.middleware.add_slash",  # custom middleware
+    "corsheaders.middleware.CorsMiddleware",  # corsheaders
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
@@ -231,8 +234,10 @@ EMBEDDINGS_URL_TOKEN = env("EMBEDDINGS_URL_TOKEN")
 # Gotenberg
 GOTENBERG_URL = env("GOTENBERG_URL", default="http://gotenberg:3000")
 
-# logging
+# cors
+CORS_ALLOW_ALL_ORIGINS = True
 
+# logging
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
