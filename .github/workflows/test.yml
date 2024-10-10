@@ -25,6 +25,8 @@ jobs:
 
       gotenberg:
         image: gotenberg/gotenberg:8
+        ports:
+          - 3000:3000
 
     steps:
       - uses: actions/checkout@v4
