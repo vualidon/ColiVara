@@ -59,9 +59,9 @@ The ColiPali team has provided the following evals in their paper. We have run q
 
 1. Postgres DB with pgvector extension for storing embeddings. (This repo)
 2. REST API for CRUD operations on Documents, Collections, and Users. (This repo)
-3. Embeddings Service. This needs a GPU with at least 8gb VRAM. The code is under `ColiVarE` repo and is optimized for a serverless GPU workload.
+3. Embeddings Service. This needs a GPU with at least 8gb VRAM. The code is under [`ColiVarE`](https://github.com/tjmlabs/ColiVarE) repo and is optimized for a serverless GPU workload.
 
-   > You can run the embedding service seperately and use your own storage and API for the rest of the components. The Embedding service is designed to be modular and can be used with any storage and API. (For example, if you want to use QDrant for storage and Node for the API)
+   > You can run the embedding service seperately and use your own storage and API for the rest of the components. The Embedding service is designed to be modular and can be used with any storage and API. (For example, if you want to use Qdrant for storage and Node for the API)
 
 4. Language-specific SDKs for the API (Coming Soon)
 
