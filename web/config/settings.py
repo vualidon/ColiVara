@@ -228,6 +228,8 @@ SOCIALACCOUNT_LOGIN_ON_GET = True
 EMBEDDINGS_URL = env("EMBEDDINGS_URL")
 EMBEDDINGS_URL_TOKEN = env("EMBEDDINGS_URL_TOKEN")
 
+# Gotenberg
+GOTENBERG_URL = env("GOTENBERG_URL", default="http://gotenberg:3000")
 
 # logging
 

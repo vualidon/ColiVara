@@ -2,6 +2,10 @@
 
 **State of The Art Retrieval, One line of Code**
 
+[![codecov](https://codecov.io/gh/tjmlabs/ColiVara/branch/main/graph/badge.svg)](https://codecov.io/gh/tjmlabs/ColiVara)
+
+[![Tests](https://github.com/tjmlabs/ColiVara/actions/workflows/test.yml/badge.svg)](https://github.com/tjmlabs/Colivara/actions/workflows/test.yml)
+
 Colivara is a suite of services that allows you to store, search, and retrieve documents based on their visual embeddings. It is a web-first implementation of the ColiPali paper using ColQwen2 as backend model. It works exacly like RAG from the end-user standpoint - but using vision models instead of chunking and text-processing for documents.
 
 **Problem**:

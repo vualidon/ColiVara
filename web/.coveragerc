@@ -3,3 +3,6 @@ omit =
     */migrations/*
 [html]
 directory = api/tests/htmlcov
+
+[xml]
+output = api/tests/htmlcov/coverage.xml

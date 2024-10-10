@@ -1,0 +1,84 @@
+on:
+  pull_request:
+    branches: [main]
+
+  # on demand
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: test_db
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      gotenberg:
+        image: gotenberg/gotenberg:8
+        ports:
+          - 3000:3000
+        options: >-
+          --health-cmd "curl -f http://localhost:3000/health"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        working-directory: ./web
+        run: |
+          sudo apt-get update && sudo apt-get install -y libmagic1 poppler-utils
+          python -m pip install --upgrade pip
+          pip install -r requirements.in
+
+      - name: Run migrations
+        working-directory: ./web
+        env:
+          DATABASE_URL: postgres://test_user:test_password@localhost:5432/test_db
+          EMBEDDINGS_URL: ${{ secrets.EMBEDDINGS_URL }}
+          EMBEDDINGS_URL_TOKEN: ${{ secrets.EMBEDDINGS_URL_TOKEN }}
+        run: python manage.py migrate
+
+      - name: Run mypy
+        working-directory: ./web
+        env:
+          EMBEDDINGS_URL: ${{ secrets.EMBEDDINGS_URL }}
+          EMBEDDINGS_URL_TOKEN: ${{ secrets.EMBEDDINGS_URL_TOKEN }}
+          GOTENBERG_URL: http://localhost:3000
+        run: mypy .
+
+      - name: Run tests
+        working-directory: ./web
+        env:
+          EMBEDDINGS_URL: ${{ secrets.EMBEDDINGS_URL }}
+          EMBEDDINGS_URL_TOKEN: ${{ secrets.EMBEDDINGS_URL_TOKEN }}
+          DATABASE_URL: postgres://test_user:test_password@localhost:5432/test_db
+          GOTENBERG_URL: http://localhost:3000
+        run: pytest
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          fail_ci_if_error: true
+          file: ./web/api/tests/htmlcov/coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          token: ${{ secrets.CODECOV_TOKEN }}
+          verbose: true

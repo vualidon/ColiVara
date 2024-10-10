@@ -519,7 +519,7 @@ class Document(models.Model):
         """
         Helper method to convert documents to PDF using Gotenberg.
         """
-        Gotenberg_URL = "http://gotenberg:3000"
+        Gotenberg_URL = settings.GOTENBERG_URL
         endpoint = "/forms/libreoffice/convert"
         url = Gotenberg_URL + endpoint
 
@@ -556,7 +556,7 @@ class Document(models.Model):
         """
         Helper method to convert a webpage URL to PDF using Gotenberg.
         """
-        Gotenberg_URL = "http://gotenberg:3000"
+        Gotenberg_URL = settings.GOTENBERG_URL
         endpoint = "/forms/chromium/convert/url"
         gotenberg_url = Gotenberg_URL + endpoint
         logger.info(f"Converting URL to PDF as a Webpage: {url}")
