@@ -1,28 +1,61 @@
-## ColiVara = COntextualized Late Interaction Vision Augmented Retrieval API
+# ColiVara = COntextualized Late Interaction Vision Augmented Retrieval API
 
-**State of The Art Retrieval, One line of Code**
+[![codecov](https://codecov.io/gh/tjmlabs/ColiVara/branch/main/graph/badge.svg)](https://codecov.io/gh/tjmlabs/ColiVara) [![Tests](https://github.com/tjmlabs/ColiVara/actions/workflows/test.yml/badge.svg)](https://github.com/tjmlabs/Colivara/actions/workflows/test.yml)
 
-[![codecov](https://codecov.io/gh/tjmlabs/ColiVara/branch/main/graph/badge.svg)](https://codecov.io/gh/tjmlabs/ColiVara)
+**State of The Art Retrieval, Two lines of Code**
 
-[![Tests](https://github.com/tjmlabs/ColiVara/actions/workflows/test.yml/badge.svg)](https://github.com/tjmlabs/Colivara/actions/workflows/test.yml)
+```python
+# index document
+requests.post("/v1/documents/upsert-document/", json={"name": name, "url": url})
 
-Colivara is a suite of services that allows you to store, search, and retrieve documents based on their visual embeddings. It is a web-first implementation of the ColiPali paper using ColQwen2 as backend model. It works exacly like RAG from the end-user standpoint - but using vision models instead of chunking and text-processing for documents.
+# search for document
+requests.post("/v1/search/", json={"query": query})
+```
 
-**Problem**:
+Colivara is a suite of services that allows you to store, search, and retrieve documents based on their visual embeddings.
 
-- Documents are visually rich structures that convey information through text, as well as tables, figures, page layouts, or fonts. While modern document retrieval systems exhibit strong performance on query-to-text matching, they struggle to exploit visual cues efficiently, hindering their performance on practical document retrieval applications such as Retrieval Augmented Generation.
+It is a web-first implementation of the ColiPali paper using ColQwen2 as backend model. It works exacly like RAG from the end-user standpoint - but using vision models instead of chunking and text-processing for documents.
 
-[Learn More in the ColiPali Paper](https://arxiv.org/abs/2407.01449){:target="\_blank"}
+**Why?**
+
+RAG (Retrieval Augmented Generation) is a powerful technique that allows us to enhance LLMs (Language Models) output with private documents and proprietary knowledge that is not available elsewhere. (For example, a company's internal documents or a researcher's notes).
+
+However, it is limited by the quality of the text extraction pipeline. With limited ability to extract visual cues and other non-textual information, RAG can be suboptimal for documents that are visually rich.
+
+ColiVara uses vision models to generate embeddings for documents, allowing you to retrieve documents based on their visual content.
+
+_From the ColiPali paper:_
+
+> Documents are visually rich structures that convey information through text, as well as tables, figures, page layouts, or fonts. While modern document retrieval systems exhibit strong performance on query-to-text matching, they struggle to exploit visual cues efficiently, hindering their performance on practical document retrieval applications such as Retrieval Augmented Generation.
+
+[Learn More in the ColiPali Paper](https://arxiv.org/abs/2407.01449)
+
+**How does it work?**
+
+_Credit: [helloIamleonie on X](https://x.com/helloiamleonie)_
 
 ![ColiPali Explainer](docs/colipali-explainer.jpg)
 
-**Evals**:
+## Key Features
+
+- **State of the Art retrieval**: The API is based on the ColiPali paper and uses the ColQwen2 model for embeddings. It outperforms existing retrieval systems on both quality and latency.
+- **User Management**: Multi-user setup with each user having their own collections and documents.
+- **Collections**: A user can have multiple collections. For example, a user can have a collection for research papers and another for books. Allowing for efficient retrieval and organization of documents.
+- **Documents**: Each collection can have multiple documents with unlimited and user-defined metadata.
+- **Filtering**: Filtering for collections and documents on arbitrary metadata fields. For example, you can filter documents by author or year. Or filter collections by type.
+- **Opininonated Developer-Experience First Design**: The API is designed to be easy to use with opinionated and optimized defaults. For example, you simply hit the upsert endpoint and the API will automatically will extract the text and visual embeddings from the document and store it in the database under a default collection.
+- **Modern PgVector Features**: We use HalfVecs for faster search and reduced storage requirements.
+- **REST API**: Easy to use REST API with Swagger documentation.
+- **Comprehensive**: Full CRUD operations for documents, collections, and users.
+- **Dockerized**: Easy to setup and run with Docker and Docker Compose.
+
+## Evals:
 
 The ColiPali team has provided the following evals in their paper. We have run quick sanity checks on the API and the Embeddings Service and are getting similar results. We are working on own independent evals and will update this section with our results.
 
 ![ColiPali Evals](docs/colipali-evals.png)
 
-**Components**:
+## Components:
 
 1. Postgres DB with pgvector extension for storing embeddings. (This repo)
 2. REST API for CRUD operations on Documents, Collections, and Users. (This repo)
@@ -30,7 +63,7 @@ The ColiPali team has provided the following evals in their paper. We have run q
 
    > You can run the embedding service seperately and use your own storage and API for the rest of the components. The Embedding service is designed to be modular and can be used with any storage and API. (For example, if you want to use QDrant for storage and Node for the API)
 
-4. Python SDK for the API (Coming Soon)
+4. Language-specific SDKs for the API (Coming Soon)
 
 ### Quick Usage:
 
@@ -72,24 +105,17 @@ print(pages) # top 3 pages with the most relevant information
 
 Coming soon...
 
-You can sign up for the waitlist on the [ColiVara Website](https://colivara.com){:target="\_blank"}. We will be launching a cloud version of the API soon.
+You can sign up for the waitlist on the [ColiVara Website](https://colivara.com). We will be launching a cloud version of the API soon.
 
 ### Local Setup:
 
-1. Setup the Embeddings Service (ColiVarE) - This is a separate repo and is required for the API to work. The directions are available here: [ColiVarE](https://github.com/tjmlabs/ColiVarE/blob/main/readme.md){:target="\_blank"}
+1. Setup the Embeddings Service (ColiVarE) - This is a separate repo and is required for the API to work. The directions are available here: [ColiVarE](https://github.com/tjmlabs/ColiVarE/blob/main/readme.md)
+
 2. Clone this repo and follow the Getting Started section below.
 
 ### Endpoints:
 
-Please check swagger documentation endpoint (v1/docs) for endpoints. More comprehensive documentation is being worked on. Features include:
-
-1. Multi-users setup with each user having their own collections
-2. A user may have multiple collections. For example, a user may have a collection for research papers and another for books.
-3. Each collection can have multiple documents.
-4. Filtering for collections and documents on arbitrary metadata fields. For example, you can filter documents by author or year.
-5. Opinionated and optimized defaults. For example, you can simply hit the upsert endpoint and the API will automatically will extract the text and visual embeddings from the document and store it in the database under a default collection.
-6. HalfVecs implementation for faster search and reduced storage requirements.
-7. Full CRUD operations for documents, collections, and users.
+Please check swagger documentation endpoint (v1/docs) for endpoints. More comprehensive documentation is being worked on.
 
 You can import an openAPI spec (for example for Postman) from the swagger documentation endpoint at `v1/docs/openapi.json`
 
@@ -149,4 +175,4 @@ docker-compose exec web mypy .
 
 This project is licensed under Functional Source License, Version 1.1, Apache 2.0 Future License. See the [LICENSE.md](LICENSE.md) file for details.
 
-For commercial licensing, please contact us at [tjmlabs.com](https://tjmlabs.com){:target="\_blank"}. We are happy to work with you to provide a license that meets your needs.
+For commercial licensing, please contact us at [tjmlabs.com](https://tjmlabs.com). We are happy to work with you to provide a license that meets your needs.
