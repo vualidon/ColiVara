@@ -68,12 +68,28 @@ class Bearer(HttpBearer):
 
 class CollectionIn(Schema):
     name: str
-    metadata: Optional[dict] = {}
+    metadata: Optional[dict] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_name(self) -> Self:
         if self.name.lower() == "all":
             raise ValueError("Collection name 'all' is not allowed.")
+        return self
+
+
+class PatchCollectionIn(Schema):
+    name: Optional[str] = None
+    # metadata can be Not provided = keep the old metadata
+    # emtpy dict = override the metadata with an empty dict
+    # dict = update the metadata with the provided dict
+    metadata: Optional[dict] = None
+
+    @model_validator(mode="after")
+    def validate_name(self) -> Self:
+        if self.name and self.name.lower() == "all":
+            raise ValueError("Collection name 'all' is not allowed.")
+        if not any([self.name, self.metadata]):
+            raise ValueError("At least one field must be provided to update.")
         return self
 
 
@@ -198,7 +214,7 @@ async def get_collection(
     response={200: CollectionOut, 404: GenericError},
 )
 async def partial_update_collection(
-    request: Request, collection_name: str, payload: CollectionIn
+    request: Request, collection_name: str, payload: PatchCollectionIn
 ) -> Tuple[int, CollectionOut] | Tuple[int, GenericError]:
     """
     Partially update a collection.
@@ -208,7 +224,7 @@ async def partial_update_collection(
     Args:
         request: The request object containing authentication details.
         collection_name (str): The name of the collection to be updated.
-        payload (CollectionIn): The payload containing the fields to be updated.
+        payload (PatchCollectionIn): The payload containing the fields to be updated.
 
     Returns:
         dict: A message indicating the collection was updated successfully.
@@ -224,7 +240,10 @@ async def partial_update_collection(
         return 404, GenericError(detail=f"Collection: {collection_name} doesn't exist")
 
     collection.name = payload.name or collection.name
-    collection.metadata = payload.metadata or collection.metadata
+
+    if payload.metadata is not None:
+        collection.metadata = payload.metadata
+
     await collection.asave()
     return 200, CollectionOut(
         id=collection.id, name=collection.name, metadata=collection.metadata

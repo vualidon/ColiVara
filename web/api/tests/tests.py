@@ -236,6 +236,39 @@ async def test_patch_collection_not_found(async_client, user, collection):
     assert response.status_code == 404
 
 
+# test collection patch with no fields to update
+async def test_patch_collection_no_data_to_update(async_client, user, collection):
+    response = await async_client.patch(
+        "/collections/Test Collection Fixture/",
+        json={},
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 422
+
+
+async def test_patch_collection_no_metadata(async_client, user, collection):
+    response = await async_client.patch(
+        "/collections/Test Collection Fixture/",
+        json={"name": "Test Collection Update"},
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": 1,
+        "name": "Test Collection Update",
+        "metadata": {"key": "value"},
+    }
+
+
+async def test_patch_collection_all(async_client, user, collection):
+    response = await async_client.patch(
+        "/collections/Test Collection Fixture/",
+        json={"name": "all"},
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 422
+
+
 async def test_delete_collection(async_client, user, collection):
     collection_name = "Test Collection Fixture"
     response = await async_client.delete(
