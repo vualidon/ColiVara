@@ -12,6 +12,7 @@ aiohttp[speedups]==3.10.5
 python-magic==0.4.27 
 pdf2image==1.17.0
 tenacity==9.0.0
+sentry-sdk[django]==2.16.0 
 django-cors-headers==4.4.0
 pytest-django==4.8.0 
 pytest-asyncio==0.24.0
