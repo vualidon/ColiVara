@@ -253,3 +253,16 @@ LOGGING = {
 }
 
 logger = logging.getLogger(__name__)
+
+# SENTRY
+SENTRY_DSN = env("SENTRY_DSN", default=None)
+
+if SENTRY_DSN:
+    import sentry_sdk
+
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        traces_sample_rate=0.1,
+    )
+
+    logger.info("Sentry is enabled.")
