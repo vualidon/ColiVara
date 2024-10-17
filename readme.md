@@ -2,17 +2,49 @@
 
 [![codecov](https://codecov.io/gh/tjmlabs/ColiVara/branch/main/graph/badge.svg)](https://codecov.io/gh/tjmlabs/ColiVara) [![Tests](https://github.com/tjmlabs/ColiVara/actions/workflows/test.yml/badge.svg)](https://github.com/tjmlabs/Colivara/actions/workflows/test.yml)
 
-**State of The Art Retrieval, Two lines of Code**
+**State of the Art Retrieval - with a delightful deveoper experience**
 
-```python
-# index document
-requests.post("/v1/documents/upsert-document/", json={"name": name, "url": url})
-
-# search for document
-requests.post("/v1/search/", json={"query": query})
+```bash
+pip install colivara-py
 ```
 
-Colivara is a suite of services that allows you to store, search, and retrieve documents based on their visual embeddings.
+Install the Python SDK and use it to interact with the API.
+
+```python
+import os
+from colivara_py import ColiVara
+
+
+rag_client = ColiVara(
+     # This is the default and can be omitted
+    api_key=os.environ.get("COLIVARA_API_KEY"),
+    # This is the default and can be omitted
+    base_url="https://api.colivara.com"
+)
+# Create a new collection (Optional)
+new_collection = rag_client.create_collection(name="my_collection", metadata={"description": "A sample collection"})
+print(f"Created collection: {new_collection.name}")
+
+# Upload a document to the collection
+document = rag_client.upsert_document(
+    name="sample_document",
+    collection_name="my_collection",
+    url="https://example.com/sample.pdf",
+    metadata={"author": "John Doe"}
+)
+print(f"Uploaded document: {document.name}")
+
+# Search for documents
+search_results = rag_client.search(
+    query="machine learning",
+    collection_name="my_collection",
+    top_k=3
+)
+for result in search_results.results:
+    print(f"Page {result.page_number} of {result.document_name}: Score {result.normalized_score}")
+```
+
+Colivara is a suite of services that allows you to store, search, and retrieve documents based on their **_visual_** embeddings.
 
 It is a web-first implementation of the ColiPali paper using ColQwen2 as backend model. It works exacly like RAG from the end-user standpoint - but using vision models instead of chunking and text-processing for documents.
 
@@ -40,10 +72,12 @@ _Credit: [helloIamleonie on X](https://x.com/helloiamleonie)_
 
 - **State of the Art retrieval**: The API is based on the ColiPali paper and uses the ColQwen2 model for embeddings. It outperforms existing retrieval systems on both quality and latency.
 - **User Management**: Multi-user setup with each user having their own collections and documents.
+- **Wide Format Support**: Supports over 100 file formats including PDF, DOCX, PPTX, and more.
+- **Webpage Support**: Automatically takes a screenshot of webpages and indexes them even if it not a file.
 - **Collections**: A user can have multiple collections. For example, a user can have a collection for research papers and another for books. Allowing for efficient retrieval and organization of documents.
 - **Documents**: Each collection can have multiple documents with unlimited and user-defined metadata.
 - **Filtering**: Filtering for collections and documents on arbitrary metadata fields. For example, you can filter documents by author or year. Or filter collections by type.
-- **Opininonated Developer-Experience First Design**: The API is designed to be easy to use with opinionated and optimized defaults. For example, you simply hit the upsert endpoint and the API will automatically will extract the text and visual embeddings from the document and store it in the database under a default collection.
+- \*_Conventio over Configuration_: The API is designed to be easy to use with opinionated and optimized defaults.
 - **Modern PgVector Features**: We use HalfVecs for faster search and reduced storage requirements.
 - **REST API**: Easy to use REST API with Swagger documentation.
 - **Comprehensive**: Full CRUD operations for documents, collections, and users.
@@ -67,38 +101,30 @@ The ColiPali team has provided the following evals in their paper. We have run q
 
 ### Quick Usage:
 
-1. Index a document:
+1. Index a document. Colivara accepts a url, or base64 encoded file, or a file path. We support over 100 file formats including PDF, DOCX, PPTX, and more. We will also automically take a screenshot of URLs (webpages) and index them.
 
 ```python
-import requests
+from colivara_py import ColiVara
 
-url = "<service_url>/v1/documents/upsert-document/"
+rag_client = ColiVara(
+    # this is the default and can be omitted
+    api_key=os.environ.get("COLIVARA_API_KEY"),
+    base_url="https://api.colivara.com"
+)
 
-payload = {
-    "name": "Attention Is All You Need",
-    "url": "https://arxiv.org/abs/1706.03762",
-}
-headers = {
-    "Content-Type": "application/json",
-    "Authorization": "Bearer <token>"
-}
-
-response = requests.post(url, json=payload, headers=headers)
+# Upload a document to the default collection
+document = rag_client.upsert_document(
+    name="sample_document",
+    url="https://example.com/sample.pdf",
+    metadata={"author": "John Doe"}
+)
 ```
 
-2. Search for a document:
+2. Search for a document. You can filter by collection name, collection metadata, and document metadata. You can also specify the number of results you want.
 
 ```python
-import requests
-url = "<service_url>/v1/search/"
-payload = {"query": "What is the attention mechanism in transformers?"}
-headers = {
-    "Content-Type": "application/json",
-    "Authorization": "Bearer <token>"
-}
-response = requests.post(url, json=payload, headers=headers)
-pages = response.json()
-print(pages) # top 3 pages with the most relevant information
+results = rag_client.search(query="machine learning")
+print(results) # top 3 pages with the most relevant information
 ```
 
 ### Cloud Quickstart:
@@ -121,8 +147,7 @@ You can import an openAPI spec (for example for Postman) from the swagger docume
 
 ## Roadmap for 1.0 Release
 
-1.  Python SDK for the API
-2.  Complete Documentation for the API
+1.  Complete Documentation for the API
 
 ## Roadmap for 2.0 Release
 
