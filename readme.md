@@ -77,7 +77,7 @@ _Credit: [helloIamleonie on X](https://x.com/helloiamleonie)_
 - **Collections**: A user can have multiple collections. For example, a user can have a collection for research papers and another for books. Allowing for efficient retrieval and organization of documents.
 - **Documents**: Each collection can have multiple documents with unlimited and user-defined metadata.
 - **Filtering**: Filtering for collections and documents on arbitrary metadata fields. For example, you can filter documents by author or year. Or filter collections by type.
-- \*_Conventio over Configuration_: The API is designed to be easy to use with opinionated and optimized defaults.
+- **Convention over Configuration**: The API is designed to be easy to use with opinionated and optimized defaults.
 - **Modern PgVector Features**: We use HalfVecs for faster search and reduced storage requirements.
 - **REST API**: Easy to use REST API with Swagger documentation.
 - **Comprehensive**: Full CRUD operations for documents, collections, and users.
@@ -92,12 +92,13 @@ The ColiPali team has provided the following evals in their paper. We have run q
 ## Components:
 
 1. Postgres DB with pgvector extension for storing embeddings. (This repo)
-2. REST API for CRUD operations on Documents, Collections, and Users. (This repo)
+2. REST API for document/collection management (This repo)
 3. Embeddings Service. This needs a GPU with at least 8gb VRAM. The code is under [`ColiVarE`](https://github.com/tjmlabs/ColiVarE) repo and is optimized for a serverless GPU workload.
 
    > You can run the embedding service seperately and use your own storage and API for the rest of the components. The Embedding service is designed to be modular and can be used with any storage and API. (For example, if you want to use Qdrant for storage and Node for the API)
 
-4. Language-specific SDKs for the API (Coming Soon)
+4. Language-specific SDKs for the API (Typescript SDK Coming Soon)
+   1. Python SDK: [ColiVara-Py](https://github.com/tjmlabs/colivara-py)
 
 ### Quick Usage:
 
