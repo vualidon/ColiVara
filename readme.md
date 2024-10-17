@@ -4,51 +4,47 @@
 
 **State of the Art Retrieval - with a delightful deveoper experience**
 
+Colivara is a suite of services that allows you to store, search, and retrieve documents based on their **_visual_** embedding.
+
+It is a web-first implementation of the ColiPali paper using ColQwen2 as the LLM model. It works exactly like RAG from the end-user standpoint - but using vision models instead of chunking and text-processing for documents.
+
+### Quick Usage:
+
+1. Get an API Key from the [ColiVara Website](https://colivara.com) or run the API locally (see below).
+
+2. Install the Python SDK and use it to interact with the API.
+
 ```bash
 pip install colivara-py
 ```
 
-Install the Python SDK and use it to interact with the API.
+3. Index a document. Colivara accepts a file url, or base64 encoded file, or a file path. We support over 100 file formats including PDF, DOCX, PPTX, and more. We will also automically take a screenshot of URLs (webpages) and index them.
 
 ```python
-import os
 from colivara_py import ColiVara
 
-
 rag_client = ColiVara(
-     # This is the default and can be omitted
+    # this is the default and can be omitted
     api_key=os.environ.get("COLIVARA_API_KEY"),
-    # This is the default and can be omitted
     base_url="https://api.colivara.com"
 )
-# Create a new collection (Optional)
-new_collection = rag_client.create_collection(name="my_collection", metadata={"description": "A sample collection"})
-print(f"Created collection: {new_collection.name}")
 
-# Upload a document to the collection
+# Upload a document to the default collection
 document = rag_client.upsert_document(
     name="sample_document",
-    collection_name="my_collection",
     url="https://example.com/sample.pdf",
     metadata={"author": "John Doe"}
 )
-print(f"Uploaded document: {document.name}")
-
-# Search for documents
-search_results = rag_client.search(
-    query="machine learning",
-    collection_name="my_collection",
-    top_k=3
-)
-for result in search_results.results:
-    print(f"Page {result.page_number} of {result.document_name}: Score {result.normalized_score}")
 ```
 
-Colivara is a suite of services that allows you to store, search, and retrieve documents based on their **_visual_** embeddings.
+4. Search for a document. You can filter by collection name, collection metadata, and document metadata. You can also specify the number of results you want.
 
-It is a web-first implementation of the ColiPali paper using ColQwen2 as backend model. It works exacly like RAG from the end-user standpoint - but using vision models instead of chunking and text-processing for documents.
+```python
+results = rag_client.search(query="machine learning")
+print(results) # top 3 pages with the most relevant information
+```
 
-**Why?**
+### Why?
 
 RAG (Retrieval Augmented Generation) is a powerful technique that allows us to enhance LLMs (Language Models) output with private documents and proprietary knowledge that is not available elsewhere. (For example, a company's internal documents or a researcher's notes).
 
@@ -99,34 +95,6 @@ The ColiPali team has provided the following evals in their paper. We have run q
 
 4. Language-specific SDKs for the API (Typescript SDK Coming Soon)
    1. Python SDK: [ColiVara-Py](https://github.com/tjmlabs/colivara-py)
-
-### Quick Usage:
-
-1. Index a document. Colivara accepts a url, or base64 encoded file, or a file path. We support over 100 file formats including PDF, DOCX, PPTX, and more. We will also automically take a screenshot of URLs (webpages) and index them.
-
-```python
-from colivara_py import ColiVara
-
-rag_client = ColiVara(
-    # this is the default and can be omitted
-    api_key=os.environ.get("COLIVARA_API_KEY"),
-    base_url="https://api.colivara.com"
-)
-
-# Upload a document to the default collection
-document = rag_client.upsert_document(
-    name="sample_document",
-    url="https://example.com/sample.pdf",
-    metadata={"author": "John Doe"}
-)
-```
-
-2. Search for a document. You can filter by collection name, collection metadata, and document metadata. You can also specify the number of results you want.
-
-```python
-results = rag_client.search(query="machine learning")
-print(results) # top 3 pages with the most relevant information
-```
 
 ### Cloud Quickstart:
 
