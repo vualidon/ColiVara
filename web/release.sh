@@ -14,5 +14,5 @@ python manage.py migrate --noinput
 
 # start uvicorn server
 echo "Starting server..."
-uvicorn config.asgi:application --host 0.0.0.0 --port 8000 --lifespan off --workers 7
+uvicorn config.asgi:application --host 0.0.0.0 --port 8000 --lifespan off --workers 7 --timeout-keep-alive 600 --limit-max-requests 1000
 
