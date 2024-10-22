@@ -4,10 +4,11 @@ from enum import Enum
 from typing import Dict, List, Optional, Tuple, Union
 
 import aiohttp
+import asyncio
 from accounts.models import CustomUser
 from django.conf import settings
 from django.contrib.postgres.aggregates import ArrayAgg
-from django.core.exceptions import ValidationError
+from django.core.mail import EmailMessage
 from django.db.models import Count, Prefetch
 from django.db.models.query import QuerySet
 from django.db.utils import IntegrityError
@@ -100,6 +101,10 @@ class CollectionOut(Schema):
 
 
 class GenericError(Schema):
+    detail: str
+
+
+class GenericMessage(Schema):
     detail: str
 
 
@@ -298,6 +303,7 @@ class DocumentIn(Schema):
     )
     url: Optional[str] = None
     base64: Optional[str] = None
+    wait: Optional[bool] = False
 
     @model_validator(mode="after")
     def base64_or_url(self) -> Self:
@@ -344,47 +350,9 @@ class DocumentInPatch(Schema):
         return self
 
 
-@router.post(
-    "/documents/upsert-document/",
-    tags=["documents"],
-    auth=Bearer(),
-    response={201: DocumentOut, 400: GenericError},
-)
-async def upsert_document(
+async def process_upsert_document(
     request: Request, payload: DocumentIn
 ) -> Tuple[int, DocumentOut] | Tuple[int, GenericError]:
-    """
-    Create or update a document in a collection. Average latency is 7 seconds per page.
-
-    This endpoint allows the user to create or update a document in a collection.
-    The document can be provided as a URL or a base64-encoded string.
-    if the collection is not provided, a collection named "default collection" will be used.
-    if the collection is provided, it will be created if it does not exist.
-
-    Args:
-        request: The HTTP request object, which includes the user information.
-        payload (DocumentIn): The input data for creating or updating the document.
-
-    Returns:
-        DocumentOut: The created or updated document with its details.
-
-    Raises:
-        HttpError: If the document cannot be created or updated.
-
-    Example:
-        POST /documents/upsert-document/
-        {
-            "name": "my_document",
-            "metadata": {"author": "John Doe"},
-            "collection": "my_collection",
-            "url": "https://example.com/my_document.pdf
-        }
-    """
-    # if the user didn't give a collection, payload.collection will be "default collection"
-    if payload.collection_name == "all":
-        return 400, GenericError(
-            detail="The collection name 'all' is not allowed when inserting or updating a document - only when retrieving. Please provide a valid collection name."
-        )
     collection, _ = await Collection.objects.aget_or_create(
         name=payload.collection_name, owner=request.auth
     )
@@ -429,6 +397,7 @@ async def upsert_document(
                 id=document.id,
             )
         )
+        logger.info(f"Document {document.name} processed successfully.")
         return 201, DocumentOut(
             id=document.id,
             name=document.name,
@@ -438,8 +407,78 @@ async def upsert_document(
             num_pages=document.num_pages,
             collection_name=document.collection.name,
         )
-    except ValidationError as e:
-        return 400, GenericError(detail=str(e))
+
+    except Exception as e:
+        logger.error(f"Error processing document: {str(e)}")
+
+        if payload.wait:
+            return 400, GenericError(detail=str(e))
+        else:  # only send an email in the async case
+            user_email = request.auth.email
+            admin_email = settings.ADMINS[0][1]
+
+            to = [user_email, admin_email]
+            email = EmailMessage(
+                subject="Document Upsertion Failed",
+                body=f"There was an error processing your document: {str(e)}",
+                to=to,
+                from_email=admin_email,
+            )
+            email.content_subtype = "html"
+            email.send()
+
+
+@router.post(
+    "/documents/upsert-document/",
+    tags=["documents"],
+    auth=Bearer(),
+    response={201: DocumentOut, 202: GenericMessage, 400: GenericError},
+)
+async def upsert_document(
+    request: Request, payload: DocumentIn
+) -> Tuple[int, DocumentOut] | Tuple[int, GenericError] | Tuple[int, GenericMessage]:
+    """
+    Create or update a document in a collection. Average latency is 7 seconds per page.
+
+    This endpoint allows the user to create or update a document in a collection.
+    The document can be provided as a URL or a base64-encoded string.
+    if the collection is not provided, a collection named "default collection" will be used.
+    if the collection is provided, it will be created if it does not exist.
+
+    Args:
+        request: The HTTP request object, which includes the user information.
+        payload (DocumentIn): The input data for creating or updating the document.
+
+    Returns:
+        str: A message indicating that the document is being processed.
+
+    Raises:
+        HttpError: If the document cannot be created or updated.
+
+    Example:
+        POST /documents/upsert-document/
+        {
+            "name": "my_document",
+            "metadata": {"author": "John Doe"},
+            "collection": "my_collection",
+            "url": "https://example.com/my_document.pdf,
+            "wait": true # optional, if true, the response will be sent after waiting for the document to be processed. Otherwise, it will be done asynchronously.
+        }
+    """
+    # if the user didn't give a collection, payload.collection will be "default collection"
+    if payload.collection_name == "all":
+        return 400, GenericError(
+            detail="The collection name 'all' is not allowed when inserting or updating a document - only when retrieving. Please provide a valid collection name."
+        )
+
+    if payload.wait:
+        return await process_upsert_document(request, payload)
+    else:
+        # Schedule the background task
+        asyncio.create_task(process_upsert_document(request, payload))
+        return 202, GenericMessage(
+            detail="Document is being processed in the background."
+        )
 
 
 @router.get(
