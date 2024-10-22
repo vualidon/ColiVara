@@ -411,9 +411,7 @@ async def process_upsert_document(
     except Exception as e:
         logger.error(f"Error processing document: {str(e)}")
 
-        if payload.wait:
-            return 400, GenericError(detail=str(e))
-        else:  # only send an email in the async case
+        if not payload.wait:  # only send an email in the async case
             user_email = request.auth.email
             admin_email = settings.ADMINS[0][1]
 
@@ -426,6 +424,8 @@ async def process_upsert_document(
             )
             email.content_subtype = "html"
             email.send()
+
+        return 400, GenericError(detail=str(e))
 
 
 @router.post(
