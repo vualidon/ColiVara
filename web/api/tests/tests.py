@@ -296,12 +296,13 @@ async def test_delete_collection_not_found(async_client, user, collection):
 """ Document tests """
 
 
-async def test_create_document_pdf_url(async_client, user):
+async def test_create_document_pdf_url_await(async_client, user):
     response = await async_client.post(
         "/documents/upsert-document/",
         json={
             "name": "Test Document Fixture",
             "url": "https://pdfobject.com/pdf/sample.pdf",
+            "wait": True,
         },
         headers={"Authorization": f"Bearer {user.token}"},
     )
@@ -318,8 +319,22 @@ async def test_create_document_pdf_url(async_client, user):
     }
 
 
+async def test_create_document_pdf_url_async(async_client, user):
+    response = await async_client.post(
+        "/documents/upsert-document/",
+        json={
+            "name": "Test Document Fixture",
+            "url": "https://pdfobject.com/pdf/sample.pdf",
+        },
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 202
+
+
 # the update in upsert
-async def test_create_document_pdf_url_update(async_client, user, document, collection):
+async def test_create_document_pdf_url_update_await(
+    async_client, user, document, collection
+):
     response = await async_client.post(
         "/documents/upsert-document/",
         json={
@@ -327,6 +342,7 @@ async def test_create_document_pdf_url_update(async_client, user, document, coll
             # we changed from base64 to url
             "url": "https://pdfobject.com/pdf/sample.pdf",
             "collection_name": collection.name,
+            "wait": True,
         },
         headers={"Authorization": f"Bearer {user.token}"},
     )
@@ -341,6 +357,22 @@ async def test_create_document_pdf_url_update(async_client, user, document, coll
         "collection_name": "Test Collection Fixture",
         "pages": None,
     }
+
+
+async def test_create_document_pdf_url_update_async(
+    async_client, user, document, collection
+):
+    response = await async_client.post(
+        "/documents/upsert-document/",
+        json={
+            "name": document.name,
+            # we changed from base64 to url
+            "url": "https://pdfobject.com/pdf/sample.pdf",
+            "collection_name": collection.name,
+        },
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 202
 
 
 async def test_create_document_pdf_url_all(async_client, user):
@@ -380,13 +412,14 @@ async def test_create_document_no_url_no_base64(async_client, user):
     assert response.status_code == 422
 
 
-async def test_create_document_pdf_url_collection(async_client, user, collection):
+async def test_create_document_pdf_url_collection_await(async_client, user, collection):
     response = await async_client.post(
         "/documents/upsert-document/",
         json={
             "name": "Test Document Fixture",
             "url": "https://pdfobject.com/pdf/sample.pdf",
             "collection_name": collection.name,
+            "wait": True,
         },
         headers={"Authorization": f"Bearer {user.token}"},
     )
@@ -403,7 +436,20 @@ async def test_create_document_pdf_url_collection(async_client, user, collection
     }
 
 
-async def test_create_document_pdf_base64(async_client, user, collection):
+async def test_create_document_pdf_url_collection_async(async_client, user, collection):
+    response = await async_client.post(
+        "/documents/upsert-document/",
+        json={
+            "name": "Test Document Fixture",
+            "url": "https://pdfobject.com/pdf/sample.pdf",
+            "collection_name": collection.name,
+        },
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 202
+
+
+async def test_create_document_pdf_base64_await(async_client, user, collection):
     # test_docs/ is a directory in the same level as the test.py file - we will use a sample PDF file from there
 
     with open("api/tests/test_docs/sample.pdf", "rb") as f:
@@ -415,6 +461,7 @@ async def test_create_document_pdf_base64(async_client, user, collection):
         json={
             "name": "Test Document Fixture",
             "base64": base64_string,
+            "wait": True,
         },
         headers={"Authorization": f"Bearer {user.token}"},
     )
@@ -431,7 +478,41 @@ async def test_create_document_pdf_base64(async_client, user, collection):
     }
 
 
-async def test_create_document_docx_url(async_client, user, collection):
+async def test_create_document_pdf_base64_async(async_client, user, collection):
+    # test_docs/ is a directory in the same level as the test.py file - we will use a sample PDF file from there
+
+    with open("api/tests/test_docs/sample.pdf", "rb") as f:
+        # convert the file to base64
+        base64_string = base64_string = base64.b64encode(f.read()).decode("utf-8")
+
+    response = await async_client.post(
+        "/documents/upsert-document/",
+        json={
+            "name": "Test Document Fixture",
+            "base64": base64_string,
+        },
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 202
+
+
+async def test_create_document_docx_url_await(async_client, user, collection):
+    url = "https://www.cte.iup.edu/cte/Resources/DOCX_TestPage.docx"
+    response = await async_client.post(
+        "/documents/upsert-document/",
+        json={
+            "name": "Test Document Fixture",
+            "url": url,
+            "wait": True,
+        },
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 201
+
+    await Document.objects.all().adelete()
+
+
+async def test_create_document_docx_url_async(async_client, user, collection):
     url = "https://www.cte.iup.edu/cte/Resources/DOCX_TestPage.docx"
     response = await async_client.post(
         "/documents/upsert-document/",
@@ -441,12 +522,29 @@ async def test_create_document_docx_url(async_client, user, collection):
         },
         headers={"Authorization": f"Bearer {user.token}"},
     )
-    assert response.status_code == 201
+    assert response.status_code == 202
 
     await Document.objects.all().adelete()
 
 
-async def test_create_document_docx_base64(async_client, user, collection):
+async def test_create_document_docx_base64_await(async_client, user, collection):
+    with open("api/tests/test_docs/sample.docx", "rb") as f:
+        # convert the file to base64
+        base64_string = base64.b64encode(f.read()).decode("utf-8")
+
+    response = await async_client.post(
+        "/documents/upsert-document/",
+        json={
+            "name": "Test Document Fixture",
+            "base64": base64_string,
+            "wait": True,
+        },
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 201
+
+
+async def test_create_document_docx_base64_async(async_client, user, collection):
     with open("api/tests/test_docs/sample.docx", "rb") as f:
         # convert the file to base64
         base64_string = base64.b64encode(f.read()).decode("utf-8")
@@ -459,10 +557,24 @@ async def test_create_document_docx_base64(async_client, user, collection):
         },
         headers={"Authorization": f"Bearer {user.token}"},
     )
+    assert response.status_code == 202
+
+
+async def test_create_document_webpage_await(async_client, user, collection):
+    url = "https://gotenberg.dev/docs/getting-started/introduction"
+    response = await async_client.post(
+        "/documents/upsert-document/",
+        json={
+            "name": "Test Document Fixture",
+            "url": url,
+            "wait": True,
+        },
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
     assert response.status_code == 201
 
 
-async def test_create_document_webpage(async_client, user, collection):
+async def test_create_document_webpage_async(async_client, user, collection):
     url = "https://gotenberg.dev/docs/getting-started/introduction"
     response = await async_client.post(
         "/documents/upsert-document/",
@@ -472,10 +584,24 @@ async def test_create_document_webpage(async_client, user, collection):
         },
         headers={"Authorization": f"Bearer {user.token}"},
     )
+    assert response.status_code == 202
+
+
+async def test_create_document_image_url_await(async_client, user, collection):
+    url = "https://www.w3schools.com/w3css/img_lights.jpg"
+    response = await async_client.post(
+        "/documents/upsert-document/",
+        json={
+            "name": "Test Document Fixture",
+            "url": url,
+            "wait": True,
+        },
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
     assert response.status_code == 201
 
 
-async def test_create_document_image_url(async_client, user, collection):
+async def test_create_document_image_url_async(async_client, user, collection):
     url = "https://www.w3schools.com/w3css/img_lights.jpg"
     response = await async_client.post(
         "/documents/upsert-document/",
@@ -485,10 +611,27 @@ async def test_create_document_image_url(async_client, user, collection):
         },
         headers={"Authorization": f"Bearer {user.token}"},
     )
+    assert response.status_code == 202
+
+
+async def test_create_document_image_base64_await(async_client, user, collection):
+    with open("api/tests/test_docs/sample.png", "rb") as f:
+        # convert the file to base64
+        base64_string = base64.b64encode(f.read()).decode("utf-8")
+
+    response = await async_client.post(
+        "/documents/upsert-document/",
+        json={
+            "name": "Test Document Fixture",
+            "base64": base64_string,
+            "wait": True,
+        },
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
     assert response.status_code == 201
 
 
-async def test_create_document_image_base64(async_client, user, collection):
+async def test_create_document_image_base64_async(async_client, user, collection):
     with open("api/tests/test_docs/sample.png", "rb") as f:
         # convert the file to base64
         base64_string = base64.b64encode(f.read()).decode("utf-8")
@@ -501,7 +644,7 @@ async def test_create_document_image_base64(async_client, user, collection):
         },
         headers={"Authorization": f"Bearer {user.token}"},
     )
-    assert response.status_code == 201
+    assert response.status_code == 202
 
 
 async def test_get_document_by_name(async_client, user, collection, document):
@@ -539,6 +682,7 @@ async def test_get_document_by_name_multiple_documents(
         json={
             "name": "Test Document Fixture",
             "url": "https://www.w3schools.com/w3css/img_lights.jpg",
+            "wait": True,
         },
         headers={"Authorization": f"Bearer {user.token}"},
     )
@@ -637,6 +781,7 @@ async def test_patch_document_multiple_documents(
         json={
             "name": "Test Document Fixture",
             "url": "https://www.w3schools.com/w3css/img_lights.jpg",
+            "wait": True,
         },
         headers={"Authorization": f"Bearer {user.token}"},
     )
@@ -739,6 +884,7 @@ async def test_delete_document_multiple_documents(
         json={
             "name": "Test Document Fixture",
             "url": "https://www.w3schools.com/w3css/img_lights.jpg",
+            "wait": True,
         },
         headers={"Authorization": f"Bearer {user.token}"},
     )
@@ -1196,6 +1342,7 @@ async def test_embeddings_service_down(async_client, user):
             json={
                 "name": "Test Document Fixture",
                 "url": "https://pdfobject.com/pdf/sample.pdf",
+                "wait": True,
             },
             headers={"Authorization": f"Bearer {user.token}"},
         )
@@ -1238,7 +1385,20 @@ async def test_embedding_service_down_query(async_client, user):
         assert response.status_code == 503
 
 
-async def test_embed_document_arxiv(async_client, user):
+async def test_embed_document_arxiv_await(async_client, user):
+    response = await async_client.post(
+        "/documents/upsert-document/",
+        json={
+            "name": "Test Document Fixture",
+            "url": "https://arxiv.org/pdf/2408.06643v2",
+            "wait": True,
+        },
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 201
+
+
+async def test_embed_document_arxiv_async(async_client, user):
     response = await async_client.post(
         "/documents/upsert-document/",
         json={
@@ -1247,7 +1407,7 @@ async def test_embed_document_arxiv(async_client, user):
         },
         headers={"Authorization": f"Bearer {user.token}"},
     )
-    assert response.status_code == 201
+    assert response.status_code == 202
 
 
 async def test_document_fetch_failure(async_client, user):
@@ -1268,6 +1428,7 @@ async def test_document_fetch_failure(async_client, user):
             json={
                 "name": "Test Document Fetch Failure",
                 "url": "https://example.com/nonexistent.pdf",
+                "wait": True,
             },
             headers={"Authorization": f"Bearer {user.token}"},
         )
@@ -1302,6 +1463,7 @@ async def test_document_file_too_big(async_client, user):
             json={
                 "name": "Test Document File Too Large",
                 "url": "https://example.com/largefile.pdf",
+                "wait": True,
             },
             headers={"Authorization": f"Bearer {user.token}"},
         )
@@ -1334,6 +1496,7 @@ async def test_gotenberg_service_down(async_client, user):
             json={
                 "name": "Test Document Fixture",
                 "base64": base64_string,
+                "wait": True,
             },
             headers={"Authorization": f"Bearer {user.token}"},
         )
@@ -1346,6 +1509,7 @@ async def test_gotenberg_service_down(async_client, user):
             json={
                 "name": "Test Document Fixture",
                 "url": "https://gotenberg.dev/docs/getting-started/introduction",
+                "wait": True,
             },
             headers={"Authorization": f"Bearer {user.token}"},
         )
