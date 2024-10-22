@@ -27,8 +27,7 @@ ALLOWED_HOSTS = ["*"]
 
 # Admin definition
 ADMINS = [
-    ("Abdullah", "abdullah@tjmlabs.com"),
-    #        ("Jonathan", "jonathan@tjmlabs.com"),
+    ("Jonathan", "jonathan@tjmlabs.com"),
 ]
 
 
