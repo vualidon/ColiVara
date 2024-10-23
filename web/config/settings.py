@@ -26,9 +26,10 @@ LOCAL = env.bool("LOCAL", default=True)
 ALLOWED_HOSTS = ["*"]
 
 # Admin definition
-ADMINS = [
-    ("Jonathan", "jonathan@tjmlabs.com"),
-]
+ADMINS = env.list(
+    "DJANGO_ADMINS",
+    default=[("Dummy Name", "dummy@example.com")]
+)
 
 
 # Application definition

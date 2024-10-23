@@ -1,6 +1,7 @@
 import base64
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
+import asyncio
 import pytest
 from accounts.models import CustomUser
 from api.middleware import add_slash
@@ -1410,7 +1411,7 @@ async def test_embed_document_arxiv_async(async_client, user):
     assert response.status_code == 202
 
 
-async def test_document_fetch_failure(async_client, user):
+async def test_document_fetch_failure_await(async_client, user):
     AIOHTTP_GET_PATH = "api.models.aiohttp.ClientSession.get"
     mock_response = AsyncMock()
     mock_response.status = 500
@@ -1438,6 +1439,53 @@ async def test_document_fetch_failure(async_client, user):
 
         # Assert that the response status code reflects the failure
         assert response.status_code == 400
+
+
+async def test_document_fetch_failure_async(async_client, user):
+    AIOHTTP_GET_PATH = "api.models.aiohttp.ClientSession.get"
+    mock_response = AsyncMock()
+    mock_response.status = 500
+    mock_response.headers = {}
+    mock_response.read = AsyncMock(return_value=b"")
+
+    # Mock the context manager __aenter__ to return the mock_response
+    mock_response.__aenter__.return_value = mock_response
+
+    # Patch the aiohttp.ClientSession.get method to return the mock_response
+    with patch(AIOHTTP_GET_PATH, return_value=mock_response) as mock_get:
+        # Mock EmailMessage
+        with patch("api.views.EmailMessage") as MockEmailMessage:
+            mock_email_instance = MockEmailMessage.return_value
+            mock_email_instance.send = AsyncMock()
+
+            # Perform the POST request to trigger embed_document via your endpoint
+            response = await async_client.post(
+                "/documents/upsert-document/",
+                json={
+                    "name": "Test Document Fetch Failure",
+                    "url": "https://example.com/nonexistent.pdf",
+                },
+                headers={"Authorization": f"Bearer {user.token}"},
+            )
+
+            # Assert that the response status code reflects the failure
+            assert response.status_code == 202
+
+            # Wait for all pending tasks to complete
+            pending_tasks = [task for task in asyncio.all_tasks() if task is not asyncio.current_task()]
+            await asyncio.gather(*pending_tasks)
+
+            # Assert that the fetch_document was called correctly
+            mock_get.assert_called_once_with("https://example.com/nonexistent.pdf")
+
+            # Assert that the email was sent
+            MockEmailMessage.assert_called_once_with(
+                subject="Document Upsertion Failed",
+                body="There was an error processing your document: ['Failed to fetch document from URL']",
+                to=[user.email, "dummy@example.com"],
+                from_email="dummy@example.com",
+            )
+            mock_email_instance.send.assert_called_once()
 
 
 async def test_document_file_too_big(async_client, user):
