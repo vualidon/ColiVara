@@ -1681,3 +1681,31 @@ async def test_save_base64_to_s3_failure(collection):
 
         assert str(exc_info.value) == "['Failed to save file to S3: S3 Storage Error']"
         mock_save.assert_called_once()
+
+
+async def test_unknown_mime_type(collection):
+    # Create a document with content that will produce an unknown mime type
+    content = bytes([0xFF, 0xFE, 0xFD])  # Some arbitrary bytes
+    base64_string = base64.b64encode(content).decode("utf-8")
+
+    document = Document(name="test_unknown_mime", collection=collection)
+
+    # Mock magic to return an unknown mime type
+    MAGIC_PATH = "magic.Magic.from_buffer"
+    with patch(MAGIC_PATH) as mock_magic:
+        mock_magic.return_value = "application/x-unknown-type"
+
+        # First, verify that save_base64_to_s3 saves with .bin extension
+        await document.save_base64_to_s3(base64_string)
+
+        # Assert that the filename ends with .bin
+        assert document.s3_file.name.endswith(".bin")
+
+        # Then verify that _prep_document raises ValidationError because .bin is not allowed
+        with pytest.raises(DjangoValidationError) as exc_info:
+            await document._prep_document()
+
+        assert "File extension .bin is not allowed" in str(exc_info.value)
+
+    # Cleanup
+    await document.delete_s3_file()

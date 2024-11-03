@@ -34,7 +34,7 @@ def get_upload_path(instance, filename):
     # Sanitize email to be safe for use in paths
     safe_email = owner_email.replace("@", "_at_")
     if settings.DEBUG:
-        return f"dev-documents/{safe_email}/{filename}"
+        return f"dev-documents/{safe_email}/{filename}"  # pragma: no cover
     return f"documents/{safe_email}/{filename}"
 
 
@@ -63,7 +63,7 @@ def get_extension_from_mime(mime_type):
         return extension
 
     # Default to .bin if we can't determine the type
-    return ".bin"  # pragma: no cover
+    return ".bin"
 
 
 class Collection(models.Model):
