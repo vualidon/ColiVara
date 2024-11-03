@@ -1,10 +1,10 @@
+import asyncio
 import base64
 import logging
 from enum import Enum
 from typing import Dict, List, Optional, Tuple, Union
 
 import aiohttp
-import asyncio
 from accounts.models import CustomUser
 from django.conf import settings
 from django.contrib.postgres.aggregates import ArrayAgg
@@ -325,7 +325,6 @@ class DocumentOut(Schema):
     name: str
     metadata: dict = Field(default_factory=dict)
     url: Optional[str] = None
-    base64: Optional[str] = None
     num_pages: int
     collection_name: str
     pages: Optional[List[PageOut]] = None
@@ -356,8 +355,6 @@ async def process_upsert_document(
     collection, _ = await Collection.objects.aget_or_create(
         name=payload.collection_name, owner=request.auth
     )
-    url = payload.url or ""
-    base64 = payload.base64 or ""
     try:
         # we look up the document by name and collection
         # if it exists, we update its metadate and embeddings (by calling embed_document)
@@ -373,8 +370,7 @@ async def process_upsert_document(
                 name=payload.name, collection=collection
             )
             document.metadata = payload.metadata
-            document.url = url
-            document.base64 = base64
+            document.url = payload.url or ""
             # we delete the old pages, since we will re-embed the document
             await document.pages.all().adelete()
         else:
@@ -384,9 +380,10 @@ async def process_upsert_document(
                 name=payload.name,
                 metadata=payload.metadata,
                 collection=collection,
-                url=url,
-                base64=base64,
+                url=payload.url or "",
             )
+        if payload.base64:
+            await document.save_base64_to_s3(payload.base64)
 
         # this method will embed the document and save it to the database
         await document.embed_document()
@@ -402,8 +399,7 @@ async def process_upsert_document(
             id=document.id,
             name=document.name,
             metadata=document.metadata,
-            url=document.url,
-            base64=document.base64,
+            url=await document.get_url(),
             num_pages=document.num_pages,
             collection_name=document.collection.name,
         )
@@ -540,8 +536,7 @@ async def get_document(
         id=document.id,
         name=document.name,
         metadata=document.metadata,
-        url=document.url,
-        base64=document.base64,
+        url=await document.get_url(),
         num_pages=document.num_pages,
         collection_name=document.collection.name,
     )
@@ -615,8 +610,7 @@ async def list_documents(
             id=doc.id,
             name=doc.name,
             metadata=doc.metadata,
-            url=doc.url,
-            base64=doc.base64,
+            url=await doc.get_url(),
             num_pages=doc.num_pages,
             collection_name=doc.collection.name,
         )
@@ -649,7 +643,7 @@ async def partial_update_document(
     Partially update a document.
 
     This endpoint allows for partial updates to a document's details. Only the fields provided in the payload will be updated.
-    If the URL or base64 content is changed, the document will be re-embedded. Otherwise, only the metadata and name will be updated.
+    If the URL is changed or base64 is provided, the document will be re-embedded. Otherwise, only the metadata and name will be updated.
 
     Args:
         request: The request object containing authentication details.
@@ -684,16 +678,21 @@ async def partial_update_document(
             detail=f"Multiple documents with the name: {document_name} exist in your collections. Please specify a collection."
         )
 
-    if (payload.url and payload.url != document.url) or (
-        payload.base64 and payload.base64 != document.base64
-    ):
-        document.url = payload.url or ""
-        document.base64 = payload.base64 or ""
+    if payload.url and payload.url != document.url:
+        document.url = payload.url
         document.metadata = payload.metadata or document.metadata
         document.name = payload.name or document.name
         # we want to delete the old pages, since we will re-embed the document
         await document.pages.all().adelete()
         await document.embed_document()
+
+    elif payload.base64:
+        document.metadata = payload.metadata or document.metadata
+        document.name = payload.name or document.name
+        await document.save_base64_to_s3(payload.base64)
+        await document.pages.all().adelete()
+        await document.embed_document()
+
     else:
         document.name = payload.name or document.name
         document.metadata = payload.metadata or document.metadata
@@ -708,8 +707,7 @@ async def partial_update_document(
         id=new_document.id,
         name=new_document.name,
         metadata=new_document.metadata,
-        url=new_document.url,
-        base64=new_document.base64,
+        url=await new_document.get_url(),
         num_pages=new_document.num_pages,
         collection_name=new_document.collection.name,
     )

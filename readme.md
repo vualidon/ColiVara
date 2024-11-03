@@ -2,7 +2,7 @@
 
 [![codecov](https://codecov.io/gh/tjmlabs/ColiVara/branch/main/graph/badge.svg)](https://codecov.io/gh/tjmlabs/ColiVara) [![Tests](https://github.com/tjmlabs/ColiVara/actions/workflows/test.yml/badge.svg)](https://github.com/tjmlabs/Colivara/actions/workflows/test.yml)
 
-**State of the Art Retrieval - with a delightful deveoper experience**
+**State of the Art Retrieval - with a delightful developer experience**
 
 Colivara is a suite of services that allows you to store, search, and retrieve documents based on their **_visual_** embedding.
 
@@ -137,6 +137,9 @@ git clone {repo_url}
 ```
 EMBEDDINGS_URL="the serverless embeddings service url" # for local setup use http://localhost:8000/runsync/
 EMBEDDINGS_URL_TOKEN="the serverless embeddings service token"  # for local setup use any string will do.
+AWS_S3_ACCESS_KEY_ID="an S3 or compatible storage access key"
+AWS_S3_SECRET_ACCESS_KEY="an S3 or compatible storage secret key"
+AWS_STORAGE_BUCKET_NAME="an S3 or compatible storage bucket name"
 ```
 
 3. Run the following commands:
