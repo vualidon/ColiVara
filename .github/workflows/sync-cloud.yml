@@ -4,6 +4,9 @@ on:
   release:
     types: [published]
 
+  # on demand
+  workflow_dispatch:
+
 jobs:
   sync-cloud:
     runs-on: ubuntu-latest
