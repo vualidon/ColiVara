@@ -78,6 +78,9 @@ class Collection(models.Model):
     def __str__(self) -> str:
         return self.name
 
+    def document_count(self) -> int:
+        return self.documents.count()
+
     class Meta(TypedModelMeta):
         constraints = [
             models.UniqueConstraint(
