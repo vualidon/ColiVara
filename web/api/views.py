@@ -6,7 +6,6 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import aiohttp
 from accounts.models import CustomUser
-from asgiref.sync import sync_to_async
 from django.conf import settings
 from django.contrib.postgres.aggregates import ArrayAgg
 from django.core.mail import EmailMessage
@@ -166,7 +165,7 @@ async def list_collections(request: Request) -> List[CollectionOut]:
         HTTPException: If there is an issue with the request or authentication.
     """
     collections = [
-        CollectionOut(id=c.id, name=c.name, metadata=c.metadata, num_documents=await sync_to_async(c.document_count)())
+        CollectionOut(id=c.id, name=c.name, metadata=c.metadata, num_documents=await c.document_count())
         async for c in Collection.objects.filter(owner=request.auth)
     ]
     return collections
@@ -208,7 +207,7 @@ async def get_collection(
             name=collection_name, owner=request.auth
         )
         return 200, CollectionOut(
-            id=collection.id, name=collection.name, metadata=collection.metadata, num_documents=await sync_to_async(collection.document_count)()
+            id=collection.id, name=collection.name, metadata=collection.metadata, num_documents=await collection.document_count()
         )
     except Collection.DoesNotExist:
         return 404, GenericError(detail=f"Collection: {collection_name} doesn't exist")
@@ -253,7 +252,7 @@ async def partial_update_collection(
 
     await collection.asave()
     return 200, CollectionOut(
-        id=collection.id, name=collection.name, metadata=collection.metadata, num_documents=await sync_to_async(collection.document_count)()
+        id=collection.id, name=collection.name, metadata=collection.metadata, num_documents=await collection.document_count()
     )
 
 

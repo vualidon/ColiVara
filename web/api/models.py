@@ -78,8 +78,8 @@ class Collection(models.Model):
     def __str__(self) -> str:
         return self.name
 
-    def document_count(self) -> int:
-        return self.documents.count()
+    async def document_count(self) -> int:
+        return await self.documents.acount()
 
     class Meta(TypedModelMeta):
         constraints = [
