@@ -26,7 +26,9 @@ LOCAL = env.bool("LOCAL", default=True)
 ALLOWED_HOSTS = ["*"]
 
 # Admin definition
-ADMINS = env.list("DJANGO_ADMINS", default=[("Dummy Name", "dummy@example.com")])
+DJANGO_ADMINS = env.list("DJANGO_ADMINS", default=["Dummy Name:dummy@example.com"])
+# DJANGO_ADMINS=Blake:blake@cyb.org,Alice:alice@cyb.org
+ADMINS = [tuple(x.split(":")) for x in DJANGO_ADMINS]
 
 
 # Application definition
