@@ -23,7 +23,7 @@ pip install colivara-py
 ```python
 from colivara_py import ColiVara
 
-rag_client = ColiVara(
+client = ColiVara(
     # this is the default and can be omitted
     api_key=os.environ.get("COLIVARA_API_KEY"),
     # this is the default and can be omitted
@@ -31,7 +31,7 @@ rag_client = ColiVara(
 )
 
 # Upload a document to the default collection
-document = rag_client.upsert_document(
+document = client.upsert_document(
     name="sample_document",
     url="https://example.com/sample.pdf",
     # optional - add metadata
