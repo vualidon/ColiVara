@@ -98,6 +98,7 @@ class CollectionOut(Schema):
     id: int
     name: str
     metadata: dict
+    num_documents: int
 
 
 class GenericError(Schema):
@@ -137,7 +138,7 @@ async def create_collection(
             name=payload.name, owner=request.auth, metadata=payload.metadata
         )
         return 201, CollectionOut(
-            id=collection.id, name=collection.name, metadata=collection.metadata
+            id=collection.id, name=collection.name, metadata=collection.metadata, num_documents=0
         )
     except IntegrityError:
         return 409, GenericError(
@@ -164,7 +165,7 @@ async def list_collections(request: Request) -> List[CollectionOut]:
         HTTPException: If there is an issue with the request or authentication.
     """
     collections = [
-        CollectionOut(id=c.id, name=c.name, metadata=c.metadata)
+        CollectionOut(id=c.id, name=c.name, metadata=c.metadata, num_documents=await c.document_count())
         async for c in Collection.objects.filter(owner=request.auth)
     ]
     return collections
@@ -206,7 +207,7 @@ async def get_collection(
             name=collection_name, owner=request.auth
         )
         return 200, CollectionOut(
-            id=collection.id, name=collection.name, metadata=collection.metadata
+            id=collection.id, name=collection.name, metadata=collection.metadata, num_documents=await collection.document_count()
         )
     except Collection.DoesNotExist:
         return 404, GenericError(detail=f"Collection: {collection_name} doesn't exist")
@@ -251,7 +252,7 @@ async def partial_update_collection(
 
     await collection.asave()
     return 200, CollectionOut(
-        id=collection.id, name=collection.name, metadata=collection.metadata
+        id=collection.id, name=collection.name, metadata=collection.metadata, num_documents=await collection.document_count()
     )
 
 
