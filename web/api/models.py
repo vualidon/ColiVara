@@ -498,6 +498,7 @@ class Document(models.Model):
                     extension = "pdf"
                 else:
                     extension = get_extension_from_mime(content_type).lstrip(".")
+                assert filename, "Filename should be set"
                 name = os.path.splitext(filename)[0]
                 filename = f"{name}.{extension}"
                 logger.info(f"Document filename: {filename}")
@@ -505,6 +506,10 @@ class Document(models.Model):
             raise ValidationError(
                 "Document data is missing. Please provide a document or a URL."
             )
+
+        # make sure we have the document data and filename
+        assert document_data, "Document data should be set"
+        assert filename, "Filename should be set"
 
         if not extension:
             extension = os.path.splitext(filename)[1].lstrip(".")
