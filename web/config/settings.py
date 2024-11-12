@@ -185,8 +185,10 @@ else:
         "EMAIL_HOST_PASSWORD", default="dummy password"
     )  # prod: SMTP password
     EMAIL_USE_TLS = True
-DEFAULT_EMAIL_FROM = env(
-    "DEFAULT_EMAIL_FROM", default="dummy-email@example.com"
+
+
+DEFAULT_FROM_EMAIL = env(
+    "DEFAULT_FROM_EMAIL", default="dummy-email@example.com"
 )  # prod: SMTP email
 
 
