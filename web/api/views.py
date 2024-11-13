@@ -1002,9 +1002,11 @@ async def filter(
         }
     """
     # filter the documents or collections based on the payload
+    base_query: QuerySet[Union[Document, Collection]]
+
     if payload.on == "document":
         base_query = await filter_documents(payload, request.auth)
-        results = []
+        documents = []
 
         async for doc in base_query:
             document_out = DocumentOut(
@@ -1026,10 +1028,11 @@ async def filter(
                     async for page in doc.pages.all()
                 ]
 
-            results.append(document_out)
+            documents.append(document_out)
+        return 200, documents
     else:
         base_query = await filter_collections(payload, request.auth)
-        results = [
+        collections = [
             CollectionOut(
                 id=col.id,
                 name=col.name,
@@ -1039,7 +1042,7 @@ async def filter(
             async for col in base_query
         ]
 
-    return 200, results
+        return 200, collections
 
 
 async def get_query_embeddings(query: str) -> List:
