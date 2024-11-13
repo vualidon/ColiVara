@@ -6,7 +6,8 @@ import pytest
 from accounts.models import CustomUser
 from api.middleware import add_slash
 from api.models import Collection, Document, Page, PageEmbedding
-from api.views import Bearer, QueryFilter, QueryIn, filter_query, router
+from api.views import (Bearer, QueryFilter, QueryIn, filter_collections,
+                       filter_documents, filter_query, router)
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from ninja.testing import TestAsyncClient
@@ -1026,6 +1027,29 @@ async def test_search_filter_key_equals(async_client, user, search_filter_fixtur
     assert page.document == document_1
 
 
+async def test_filter_documents_key_equals(async_client, user, search_filter_fixture):
+    collection, document_1, document_2 = search_filter_fixture
+
+    # Create a QueryFilter object
+    query_filter = QueryFilter(
+        on="document", key="important", value=True, lookup="key_lookup"
+    )
+
+    # Call the query_filter function
+    result = await filter_documents(query_filter, user)
+
+    # Check if the result is a QuerySet
+    assert isinstance(result, Document.objects.all().__class__)
+
+    # Check if only one document is returned (the one with important=True)
+    count = await result.acount()
+    assert count == 1
+    # get the document from the queryset
+    document = await result.afirst()
+    # check if the document is the correct document
+    assert document == document_1
+
+
 async def test_filter_query_document_contains(search_filter_fixture, user):
     collection, document_1, _ = search_filter_fixture
     query_in = QueryIn(
@@ -1040,6 +1064,19 @@ async def test_filter_query_document_contains(search_filter_fixture, user):
     assert count == 1
     page = await result.afirst()
     assert page.document == document_1
+
+
+async def test_filter_documents_contains(search_filter_fixture, user):
+    collection, document_1, _ = search_filter_fixture
+    query_filter = QueryFilter(
+        on="document", key="important", value=True, lookup="contains"
+    )
+
+    result = await filter_documents(query_filter, user)
+    count = await result.acount()
+    assert count == 1
+    document = await result.afirst()
+    assert document == document_1
 
 
 async def test_filter_query_collection_metadata(search_filter_fixture, user):
@@ -1089,6 +1126,20 @@ async def test_filter_query_has_key(search_filter_fixture, user):
     assert count == 0
 
 
+async def test_filter_documents_has_key(search_filter_fixture, user):
+    collection, _, _ = search_filter_fixture
+    query_filter = QueryFilter(on="document", key="important", lookup="has_key")
+    result = await filter_documents(query_filter, user)
+    count = await result.acount()
+    assert count == 2
+
+    # test if key is not there
+    query_filter = QueryFilter(on="document", key="not_there", lookup="has_key")
+    result = await filter_documents(query_filter, user)
+    count = await result.acount()
+    assert count == 0
+
+
 async def test_filter_query_has_keys(search_filter_fixture, user):
     collection, _, _ = search_filter_fixture
     query_in = QueryIn(
@@ -1111,6 +1162,20 @@ async def test_filter_query_has_keys(search_filter_fixture, user):
     assert count == 0
 
 
+async def test_filter_documents_has_keys(search_filter_fixture, user):
+    collection, _, _ = search_filter_fixture
+    query_filter = QueryFilter(on="document", key=["important"], lookup="has_keys")
+    result = await filter_documents(query_filter, user)
+    count = await result.acount()
+    assert count == 2
+
+    # test if key is not there
+    query_filter = QueryFilter(on="document", key=["important"], lookup="has_keys")
+    result = await filter_documents(query_filter, user)
+    count = await result.acount()
+    assert count == 0
+
+
 async def test_filter_query_document_contained_by(search_filter_fixture, user):
     collection, document_1, _ = search_filter_fixture
     query_in = QueryIn(
@@ -1125,6 +1190,18 @@ async def test_filter_query_document_contained_by(search_filter_fixture, user):
     assert count == 1
     page = await result.afirst()
     assert page.document == document_1
+
+
+async def test_filter_documents_contained_by(search_filter_fixture, user):
+    collection, document_1, _ = search_filter_fixture
+    query_filter = QueryFilter(
+        on="document", key="important", value=True, lookup="contained_by"
+    )
+    result = await filter_documents(query_filter, user)
+    count = await result.acount()
+    assert count == 1
+    document = await result.afirst()
+    assert document == document_1
 
 
 @pytest.mark.parametrize(
