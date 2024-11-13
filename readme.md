@@ -1,6 +1,8 @@
 # ColiVara = COntextualized Late Interaction Vision Augmented Retrieval API
 
-[![codecov](https://codecov.io/gh/tjmlabs/ColiVara/branch/main/graph/badge.svg)](https://codecov.io/gh/tjmlabs/ColiVara) [![Tests](https://github.com/tjmlabs/ColiVara/actions/workflows/test.yml/badge.svg)](https://github.com/tjmlabs/Colivara/actions/workflows/test.yml)
+[![codecov](https://codecov.io/gh/tjmlabs/ColiVara/branch/main/graph/badge.svg)](https://codecov.io/gh/tjmlabs/ColiVara) [![Tests](https://github.com/tjmlabs/ColiVara/actions/workflows/test.yml/badge.svg)](https://github.com/tjmlabs/Colivara/actions/workflows/test.yml) 
+
+[![Discord](https://dcbadge.limes.pink/api/server/https://discord.gg/VaGbJXmQ)](https://discord.gg/[INVITE](https://discord.gg/VaGbJXmQ))
 
 **State of the Art Retrieval - with a delightful developer experience**
 
