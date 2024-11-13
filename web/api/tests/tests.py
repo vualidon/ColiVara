@@ -1170,7 +1170,7 @@ async def test_filter_documents_has_keys(search_filter_fixture, user):
     assert count == 2
 
     # test if key is not there
-    query_filter = QueryFilter(on="document", key=["important"], lookup="has_keys")
+    query_filter = QueryFilter(on="document", key=["not_there"], lookup="has_keys")
     result = await filter_documents(query_filter, user)
     count = await result.acount()
     assert count == 0
