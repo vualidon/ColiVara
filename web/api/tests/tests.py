@@ -851,7 +851,7 @@ async def test_patch_document_url(async_client, user, collection, document):
     response_data = response.json()
     assert response_data["id"] == 1
     assert response_data["name"] == "Test Document Update"
-    assert response_data["metadata"] == {}
+    assert response_data["metadata"] == {'important': True}
     assert response_data["url"] == "https://www.w3schools.com/w3css/img_lights.jpg"
     assert response_data["num_pages"] == 1
     assert response_data["collection_name"] == "Test Collection Fixture"
