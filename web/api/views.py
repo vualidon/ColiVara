@@ -993,7 +993,7 @@ async def filter(
         HttpError: If the collection does not exist or the query is invalid.
 
     Example:
-        POST /search/?expand=pages
+        POST /filter/?expand=pages
         {
             "on": "document",
             "key": "breed",
