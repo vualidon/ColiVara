@@ -143,11 +143,11 @@ class Document(models.Model):
             # Generate filename
             safe_name = self.name.replace(" ", "_")
 
-            # Ensure the extension is not duplicated
-            if safe_name.endswith(extension):
-                filename = safe_name
-            else:
-                filename = f"{safe_name}{extension}"
+            # Remove any existing extension (if present)
+            name_without_extension, _ = os.path.splitext(safe_name)
+
+            # Append the correct extension
+            filename = f"{name_without_extension}{extension}"
 
             # Save to S3
             await sync_to_async(self.s3_file.save)(
