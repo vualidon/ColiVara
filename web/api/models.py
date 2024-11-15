@@ -142,7 +142,12 @@ class Document(models.Model):
             extension = get_extension_from_mime(mime_type)
             # Generate filename
             safe_name = self.name.replace(" ", "_")
-            filename = f"{safe_name}{extension}"
+
+            # Ensure the extension is not duplicated
+            if safe_name.endswith(extension):
+                filename = safe_name
+            else:
+                filename = f"{safe_name}{extension}"
 
             # Save to S3
             await sync_to_async(self.s3_file.save)(
