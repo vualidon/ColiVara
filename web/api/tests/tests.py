@@ -336,6 +336,72 @@ async def test_add_webhook(async_client, user):
         mock_svix.endpoint.create.assert_called_once(), "Svix endpoint.create was not called"
 
 
+async def test_add_webhook_error(async_client, user):
+    # Define a mock webhook URL
+    webhook_url = "http://localhost:8000/webhook-receive"
+
+    # Mock SvixAsync endpoint creation
+    with patch("api.views.SvixAsync") as MockSvixAsync:
+        # Create a mock instance of SvixAsync
+        mock_svix = AsyncMock()
+        MockSvixAsync.return_value = mock_svix
+
+        # Simulate an exception being raised during the application.create call
+        mock_svix.application.create.side_effect = Exception(
+            "Failed to create application"
+        )
+
+        # Register the webhook by calling the /documents/webhook/ endpoint
+        response = await async_client.post(
+            "/documents/webhook/",
+            json={"url": webhook_url},
+            headers={"Authorization": f"Bearer {user.token}"},
+        )
+
+        # Assert that the response status code is 400
+        assert response.status_code == 400
+
+        # Verify that Svix application.create was called
+        mock_svix.application.create.assert_called_once(), "Svix application.create was not called"
+
+
+async def test_add_webhook_twice(async_client, user):
+    # Define a mock webhook URL
+    webhook_url = "http://localhost:8000/webhook-receive"
+
+    # Mock SvixAsync endpoint creation
+    with patch("api.views.SvixAsync") as MockSvixAsync:
+        # Create a mock instance of SvixAsync
+        mock_svix = AsyncMock()
+        MockSvixAsync.return_value = mock_svix
+
+        # Register the webhook by calling the /documents/webhook/ endpoint
+        response = await async_client.post(
+            "/documents/webhook/",
+            json={"url": webhook_url},
+            headers={"Authorization": f"Bearer {user.token}"},
+        )
+
+        # Assert that the response is successful
+        assert response.status_code == 200, "Failed to register webhook"
+
+        # Register the webhook again by calling the /documents/webhook/ endpoint
+        response = await async_client.post(
+            "/documents/webhook/",
+            json={"url": webhook_url},
+            headers={"Authorization": f"Bearer {user.token}"},
+        )
+
+        # Assert that the response is successful
+        assert response.status_code == 200, "Failed to register webhook"
+
+        # Verify that Svix application.create was called
+        mock_svix.application.create.assert_called_once(), "Svix application.create was not called"
+
+        # Verify that Svix endpoint.create was called twice
+        mock_svix.endpoint.create.call_count == 2, "Svix endpoint.create was not called twice"
+
+
 async def test_create_document_pdf_url_await(async_client, user):
     response = await async_client.post(
         "/documents/upsert-document/",
