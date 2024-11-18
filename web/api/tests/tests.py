@@ -309,6 +309,33 @@ async def test_delete_collection_not_found(async_client, user, collection):
 """ Document tests """
 
 
+async def test_add_webhook(async_client, user):
+    # Define a mock webhook URL
+    webhook_url = "http://localhost:8000/webhook-receive"
+
+    # Mock SvixAsync endpoint creation
+    with patch("api.views.SvixAsync") as MockSvixAsync:
+        # Create a mock instance of SvixAsync
+        mock_svix = AsyncMock()
+        MockSvixAsync.return_value = mock_svix
+
+        # Register the webhook by calling the /documents/webhook/ endpoint
+        response = await async_client.post(
+            "/documents/webhook/",
+            json={"url": webhook_url},
+            headers={"Authorization": f"Bearer {user.token}"},
+        )
+
+        # Assert that the response is successful
+        assert response.status_code == 200, "Failed to register webhook"
+
+        # Verify that Svix application.create was called
+        mock_svix.application.create.assert_called_once(), "Svix application.create was not called"
+
+        # Verify that Svix endpoint.create was called
+        mock_svix.endpoint.create.assert_called_once(), "Svix endpoint.create was not called"
+
+
 async def test_create_document_pdf_url_await(async_client, user):
     response = await async_client.post(
         "/documents/upsert-document/",
@@ -341,6 +368,53 @@ async def test_create_document_pdf_url_async(async_client, user):
         headers={"Authorization": f"Bearer {user.token}"},
     )
     assert response.status_code == 202
+
+
+async def test_create_document_pdf_url_async_webhook(async_client, user):
+    # Define a mock webhook URL
+    webhook_url = "http://localhost:8000/webhook-receive"
+
+    # Mock SvixAsync endpoint creation
+    with patch("api.views.SvixAsync") as MockSvixAsync:
+        # Create a mock instance of SvixAsync
+        mock_svix = AsyncMock()
+        MockSvixAsync.return_value = mock_svix
+
+        # Register the webhook by calling the /documents/webhook/ endpoint
+        response = await async_client.post(
+            "/documents/webhook/",
+            json={"url": webhook_url},
+            headers={"Authorization": f"Bearer {user.token}"},
+        )
+
+        # Assert that the response is successful
+        assert response.status_code == 200, "Failed to register webhook"
+
+        # Verify that Svix application.create was called
+        mock_svix.application.create.assert_called_once(), "Svix application.create was not called"
+
+        # Verify that Svix endpoint.create was called
+        mock_svix.endpoint.create.assert_called_once(), "Svix endpoint.create was not called"
+
+        # Create a document with a PDF URL
+        response = await async_client.post(
+            "/documents/upsert-document/",
+            json={
+                "name": "Test Document Fixture",
+                "url": "https://pdfobject.com/pdf/sample.pdf",
+            },
+            headers={"Authorization": f"Bearer {user.token}"},
+        )
+        assert response.status_code == 202
+
+        # Wait for all pending tasks to complete
+        pending_tasks = [
+            task for task in asyncio.all_tasks() if task is not asyncio.current_task()
+        ]
+        await asyncio.gather(*pending_tasks)
+
+        # Verify that Svix message.create was called
+        mock_svix.message.create.assert_called_once(), "Svix message.create was not called"
 
 
 # the update in upsert
@@ -1789,6 +1863,83 @@ async def test_document_fetch_failure_async(async_client, user):
             )
 
             mock_email_instance.send.assert_called_once()
+
+
+async def test_document_fetch_failure_async_webhook(async_client, user):
+    AIOHTTP_GET_PATH = "api.models.aiohttp.ClientSession.get"
+    AIOHTTP_HEAD_PATH = "api.models.aiohttp.ClientSession.head"
+
+    # Mock for HEAD request
+    mock_head_response = AsyncMock()
+    mock_head_response.status = 200
+    mock_head_response.headers = {
+        "Content-Type": "application/pdf",
+        "Content-Length": "1000",
+    }
+    mock_head_response.__aenter__.return_value = mock_head_response
+
+    # Mock for GET request (failing response)
+    mock_get_response = AsyncMock()
+    mock_get_response.status = 500
+    mock_get_response.headers = {}
+    mock_get_response.read = AsyncMock(return_value=b"")
+    mock_get_response.__aenter__.return_value = mock_get_response
+
+    # Patch both HEAD and GET methods
+    with patch(AIOHTTP_HEAD_PATH, return_value=mock_head_response) as mock_head, patch(
+        AIOHTTP_GET_PATH, return_value=mock_get_response
+    ) as mock_get:
+        # Define a mock webhook URL
+        webhook_url = "http://localhost:8000/webhook-receive"
+
+        # Mock SvixAsync endpoint creation
+        with patch("api.views.SvixAsync") as MockSvixAsync:
+            # Create a mock instance of SvixAsync
+            mock_svix = AsyncMock()
+            MockSvixAsync.return_value = mock_svix
+
+            # Register the webhook by calling the /documents/webhook/ endpoint
+            response = await async_client.post(
+                "/documents/webhook/",
+                json={"url": webhook_url},
+                headers={"Authorization": f"Bearer {user.token}"},
+            )
+
+            # Assert that the response is successful
+            assert response.status_code == 200, "Failed to register webhook"
+
+            # Verify that Svix application.create was called
+            mock_svix.application.create.assert_called_once(), "Svix application.create was not called"
+
+            # Verify that Svix endpoint.create was called
+            mock_svix.endpoint.create.assert_called_once(), "Svix endpoint.create was not called"
+
+            # Create a document with a PDF URL
+            # Perform the POST request
+            response = await async_client.post(
+                "/documents/upsert-document/",
+                json={
+                    "name": "Test Document Fetch Failure",
+                    "url": "https://example.com/nonexistent.pdf",
+                },
+                headers={"Authorization": f"Bearer {user.token}"},
+            )
+            assert response.status_code == 202
+
+            # Wait for all pending tasks to complete
+            pending_tasks = [
+                task
+                for task in asyncio.all_tasks()
+                if task is not asyncio.current_task()
+            ]
+            await asyncio.gather(*pending_tasks)
+
+            # Assert that both HEAD and GET were called
+            mock_head.assert_called_once()
+            mock_get.assert_called_once()
+
+            # Verify that Svix message.create was called
+            mock_svix.message.create.assert_called_once(), "Svix message.create was not called"
 
 
 async def test_document_file_too_big(async_client, user):

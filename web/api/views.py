@@ -18,6 +18,7 @@ from ninja.files import UploadedFile
 from ninja.security import HttpBearer
 from pgvector.utils import HalfVector
 from pydantic import Field, model_validator
+from svix.api import ApplicationIn, EndpointIn, MessageIn, SvixAsync
 from typing_extensions import Self
 
 from .models import Collection, Document, MaxSim, Page
@@ -309,6 +310,10 @@ async def delete_collection(
 """Documents"""
 
 
+class WebhookIn(Schema):
+    url: str
+
+
 class DocumentIn(Schema):
     name: str
     metadata: dict = Field(default_factory=dict)
@@ -364,6 +369,61 @@ class DocumentInPatch(Schema):
         return self
 
 
+@router.post(
+    "/documents/webhook/",
+    auth=Bearer(),
+    tags=["documents"],
+    response={200: GenericMessage, 400: GenericError},
+)
+async def add_webhook(
+    request: Request, payload: WebhookIn
+) -> Tuple[int, GenericError] | Tuple[int, GenericMessage]:
+    """
+    Add a webhook to the service.
+
+    This endpoint allows the user to add a webhook to the service. The webhook will be called when a document is upserted
+    with the upsertion status.
+
+    Events are document upsert successful, document upsert failed.
+
+    Args:
+        request: The HTTP request object, which includes the user information.
+        url (str): The URL of the webhook.
+
+    Returns:
+        A message indicating that the webhook was added successfully.
+
+    Raises:
+        HttpError: If the webhook is invalid.
+    """
+    try:
+        svix = SvixAsync("SVIX_TOKEN")
+
+        if not request.auth.svix_application_id:
+            app = await svix.application.create(ApplicationIn(name=request.auth.email))
+            app_id = app.id
+        else:
+            app_id = request.auth.svix_application_id
+
+        # save the app_id to the user
+        request.auth.svix_application_id = app_id
+        await request.auth.asave()
+
+        # create the webhook
+        await svix.endpoint.create(
+            app_id,
+            EndpointIn(
+                url=payload.url,
+                version=1,
+                description="User webhook",
+            ),
+        )
+
+        return 200, GenericMessage(detail="Webhook added successfully.")
+    except Exception as e:
+        return 400, GenericError(detail="Error adding webhook: " + str(e))
+
+
 async def process_upsert_document(
     request: Request, payload: DocumentIn
 ) -> Tuple[int, DocumentOut] | Tuple[int, GenericError]:
@@ -410,6 +470,27 @@ async def process_upsert_document(
             )
         )
         logger.info(f"Document {document.name} processed successfully.")
+
+        if not payload.wait and request.auth.svix_application_id:
+            # send an event to the webhook
+            svix = SvixAsync("SVIX_TOKEN")
+            await svix.message.create(
+                request.auth.svix_application_id,
+                MessageIn(
+                    event_type="upsert.success",
+                    payload={
+                        "type": "upsert.success",
+                        "message": "Document upserted successfully",
+                        "id": document.id,
+                        "name": document.name,
+                        "metadata": document.metadata,
+                        "url": await document.get_url(),
+                        "num_pages": document.num_pages,
+                        "collection_name": document.collection.name,
+                    },
+                ),
+            )
+
         return 201, DocumentOut(
             id=document.id,
             name=document.name,
@@ -422,7 +503,26 @@ async def process_upsert_document(
     except Exception as e:
         logger.error(f"Error processing document: {str(e)}")
 
-        if not payload.wait:  # only send an email in the async case
+        if not payload.wait and request.auth.svix_application_id:
+            # send an event to the webhook
+            svix = SvixAsync("SVIX_TOKEN")
+            await svix.message.create(
+                request.auth.svix_application_id,
+                MessageIn(
+                    event_type="upsert.fail",
+                    payload={
+                        "type": "upsert.fail",
+                        "message": "There was an error processing your document",
+                        "name": payload.name,
+                        "metadata": payload.metadata,
+                        "collection_name": payload.collection_name,
+                        "error": str(e),
+                    },
+                ),
+            )
+        elif (
+            not payload.wait
+        ):  # only send an email in the async case and if there's no webhook
             user_email = request.auth.email
             admin_email = settings.ADMINS[0][1]
             from_email = settings.DEFAULT_FROM_EMAIL
