@@ -397,7 +397,13 @@ async def add_webhook(
         HttpError: If the webhook is invalid.
     """
     try:
-        svix = SvixAsync("SVIX_TOKEN")
+        # Throw an error if SVIX_TOKEN is not set
+        if settings.SVIX_TOKEN == "":
+            raise ValueError(
+                "SVIX_TOKEN is not set in the environment variables. Please set it before adding a webhook."
+            )
+
+        svix = SvixAsync(settings.SVIX_TOKEN)
 
         if not request.auth.svix_application_id:
             app = await svix.application.create(ApplicationIn(name=request.auth.email))
@@ -471,9 +477,13 @@ async def process_upsert_document(
         )
         logger.info(f"Document {document.name} processed successfully.")
 
-        if not payload.wait and request.auth.svix_application_id:
+        if (
+            not payload.wait
+            and request.auth.svix_application_id
+            and settings.SVIX_TOKEN != ""
+        ):
             # send an event to the webhook
-            svix = SvixAsync("SVIX_TOKEN")
+            svix = SvixAsync(settings.SVIX_TOKEN)
             await svix.message.create(
                 request.auth.svix_application_id,
                 MessageIn(
@@ -503,9 +513,13 @@ async def process_upsert_document(
     except Exception as e:
         logger.error(f"Error processing document: {str(e)}")
 
-        if not payload.wait and request.auth.svix_application_id:
+        if (
+            not payload.wait
+            and request.auth.svix_application_id
+            and settings.SVIX_TOKEN != ""
+        ):
             # send an event to the webhook
-            svix = SvixAsync("SVIX_TOKEN")
+            svix = SvixAsync(settings.SVIX_TOKEN)
             await svix.message.create(
                 request.auth.svix_application_id,
                 MessageIn(
