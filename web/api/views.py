@@ -857,14 +857,12 @@ class QueryOut(Schema):
     results: List[PageOutQuery]
 
 
-router.post(
+@router.post(
     "/search/",
     tags=["search"],
     auth=Bearer(),
     response={200: QueryOut, 503: GenericError},
 )
-
-
 async def search(
     request: Request, payload: QueryIn
 ) -> Tuple[int, QueryOut] | Tuple[int, GenericError]:
