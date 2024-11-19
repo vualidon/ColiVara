@@ -19,9 +19,9 @@ from django.db import models
 from django.db.models import FloatField, Func, JSONField, Q
 from django_stubs_ext.db.models import TypedModelMeta
 from pdf2image import convert_from_bytes
-from pgvector.django import HalfVectorField
-from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
-                      wait_fixed)
+from pgvector.django import BitField, HalfVectorField
+from pgvector.utils import Bit
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
 logger = logging.getLogger(__name__)
 
@@ -686,6 +686,14 @@ class Page(models.Model):
 class PageEmbedding(models.Model):
     page = models.ForeignKey(Page, on_delete=models.CASCADE, related_name="embeddings")
     embedding = HalfVectorField(dimensions=128)
+    bit_embedding = BitField(length=128, null=True)
+
+    # automitcally create the bit_embedding on creation
+    def save(self, *args, **kwargs):
+        if self.embedding is not None:
+            bit_embeddings = Bit(self.embedding.to_numpy() > 0).to_text()
+            self.bit_embedding = bit_embeddings
+        super().save(*args, **kwargs)
 
 
 # TO DO: Post save signal on page to get the content via OCR
@@ -694,4 +702,8 @@ class PageEmbedding(models.Model):
 class MaxSim(Func):
     function = "max_sim"
     output_field = FloatField()
+
+
+class BitMaxSim(Func):
+    function = "bit_max_sim"
     output_field = FloatField()
