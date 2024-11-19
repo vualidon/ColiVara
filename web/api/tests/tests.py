@@ -10,6 +10,7 @@ from api.views import (Bearer, QueryFilter, QueryIn, filter_collections,
                        filter_documents, filter_query, router)
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import override_settings
 from ninja.testing import TestAsyncClient
 from pydantic import ValidationError
 
@@ -334,6 +335,22 @@ async def test_add_webhook(async_client, user):
 
         # Verify that Svix endpoint.create was called
         mock_svix.endpoint.create.assert_called_once(), "Svix endpoint.create was not called"
+
+
+@override_settings(SVIX_TOKEN="")
+async def test_add_webhook_no_token(async_client, user):
+    # Define a mock webhook URL
+    webhook_url = "http://localhost:8000/webhook-receive"
+
+    # Register the webhook by calling the /documents/webhook/ endpoint
+    response = await async_client.post(
+        "/documents/webhook/",
+        json={"url": webhook_url},
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+
+    # Assert that the response status code is 400
+    assert response.status_code == 400
 
 
 async def test_add_webhook_error(async_client, user):
