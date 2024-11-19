@@ -5,7 +5,6 @@ from enum import Enum
 from typing import Dict, List, Optional, Tuple, Union
 
 import aiohttp
-import numpy as np
 from accounts.models import CustomUser
 from django.conf import settings
 from django.contrib.postgres.aggregates import ArrayAgg
@@ -17,11 +16,11 @@ from django.http.request import HttpRequest
 from ninja import File, Router, Schema
 from ninja.files import UploadedFile
 from ninja.security import HttpBearer
-from pgvector.utils import Bit, HalfVector
+from pgvector.utils import HalfVector
 from pydantic import Field, model_validator
 from typing_extensions import Self
 
-from .models import BitMaxSim, Collection, Document, MaxSim, Page
+from .models import Collection, Document, MaxSim, Page
 
 router = Router()
 
@@ -858,12 +857,14 @@ class QueryOut(Schema):
     results: List[PageOutQuery]
 
 
-@router.post(
+router.post(
     "/search/",
     tags=["search"],
     auth=Bearer(),
     response={200: QueryOut, 503: GenericError},
 )
+
+
 async def search(
     request: Request, payload: QueryIn
 ) -> Tuple[int, QueryOut] | Tuple[int, GenericError]:
@@ -903,36 +904,25 @@ async def search(
             detail="Failed to get embeddings from the embeddings service"
         )
     query_length = len(query_embeddings)  # we need this for normalization
+
+    # we want to cast the embeddings to halfvec
+    casted_query_embeddings = [
+        HalfVector(embedding).to_text() for embedding in query_embeddings
+    ]
+
     # building the query:
+
     # 1. filter the pages based on the collection_id and the query_filter
     base_query = await filter_query(payload, request.auth)
-    fast_mode = False
 
-    if not fast_mode:
-        # we want to cast the embeddings to halfvec
-        casted_query_embeddings = [
-            HalfVector(embedding).to_text() for embedding in query_embeddings
-        ]
-        # 4. annotate the query with the max sim score
-        # maxsim needs 2 arrays of embeddings, one for the pages and one for the query
-        pages_query = (
-            base_query.annotate(page_embeddings=ArrayAgg("embeddings__embedding"))
-            .annotate(max_sim=MaxSim("page_embeddings", casted_query_embeddings))
-            .order_by("-max_sim")[: payload.top_k or 3]
-        )
-
-    else:
-        bit_query_embeddings = [
-            Bit(embedding > 0).to_text() for embedding in np.array(query_embeddings)
-        ]
-        # 2. initial ranking with BitMaxSim
-        pages_query = (
-            base_query.annotate(page_embeddings=ArrayAgg("embeddings__bit_embedding"))
-            .annotate(max_sim=BitMaxSim("page_embeddings", bit_query_embeddings))
-            .order_by("-max_sim")[: payload.top_k or 3]
-        )
-
-    # 5. execute the query
+    # 2. annotate the query with the max sim score
+    # maxsim needs 2 arrays of embeddings, one for the pages and one for the query
+    pages_query = (
+        base_query.annotate(page_embeddings=ArrayAgg("embeddings__embedding"))
+        .annotate(max_sim=MaxSim("page_embeddings", casted_query_embeddings))
+        .order_by("-max_sim")[: payload.top_k or 3]
+    )
+    # 3. execute the query
     results = pages_query.values(
         "id",
         "page_number",
@@ -945,6 +935,8 @@ async def search(
         "document__collection__metadata",
         "max_sim",
     )
+    # Normalization
+    normalization_factor = query_length
 
     # Format the results
     formatted_results = [
@@ -963,7 +955,7 @@ async def search(
             ),
             page_number=row["page_number"],
             raw_score=row["max_sim"],
-            normalized_score=row["max_sim"] / query_length,
+            normalized_score=row["max_sim"] / normalization_factor,
             img_base64=row["img_base64"],
         )
         async for row in results
