@@ -707,3 +707,8 @@ class MaxSim(Func):
 class BitMaxSim(Func):
     function = "bit_max_sim"
     output_field = FloatField()
+
+
+class CosineMaxSim(Func):
+    function = "cosine_max_sim"
+    output_field = FloatField()
