@@ -13,6 +13,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
 from ninja.testing import TestAsyncClient
 from pydantic import ValidationError
+from svix.api import ApplicationOut, EndpointOut, EndpointSecretOut
 
 pytestmark = [pytest.mark.django_db(transaction=True, reset_sequences=True)]
 
@@ -320,6 +321,25 @@ async def test_add_webhook(async_client, user):
         mock_svix = AsyncMock()
         MockSvixAsync.return_value = mock_svix
 
+        # Set return values for the mocked methods
+        mock_svix.application.create.return_value = ApplicationOut(
+            id="app_id",
+            name="app_name",
+            created_at="2021-01-01T00:00:00Z",
+            metadata={},
+            updated_at="2021-01-01T00:00:00Z",
+        )
+        mock_svix.endpoint.create.return_value = EndpointOut(
+            id="endpoint_id",
+            created_at="2021-01-01T00:00:00Z",
+            metadata={},
+            updated_at="2021-01-01T00:00:00Z",
+            description="endpoint_description",
+            url="endpoint_url",
+            version="v1",
+        )
+        mock_svix.endpoint.get_secret.return_value = EndpointSecretOut(key="secret_key")
+
         # Register the webhook by calling the /documents/webhook/ endpoint
         response = await async_client.post(
             "/documents/webhook/",
@@ -335,6 +355,9 @@ async def test_add_webhook(async_client, user):
 
         # Verify that Svix endpoint.create was called
         mock_svix.endpoint.create.assert_called_once(), "Svix endpoint.create was not called"
+
+        # Verify that Svix endpoint.get_secret was called
+        mock_svix.endpoint.get_secret.assert_called_once(), "Svix endpoint.get_secret was not called"
 
 
 @override_settings(SVIX_TOKEN="")
@@ -391,6 +414,25 @@ async def test_add_webhook_twice(async_client, user):
         # Create a mock instance of SvixAsync
         mock_svix = AsyncMock()
         MockSvixAsync.return_value = mock_svix
+
+        # Set return values for the mocked methods
+        mock_svix.application.create.return_value = ApplicationOut(
+            id="app_id",
+            name="app_name",
+            created_at="2021-01-01T00:00:00Z",
+            metadata={},
+            updated_at="2021-01-01T00:00:00Z",
+        )
+        mock_svix.endpoint.create.return_value = EndpointOut(
+            id="endpoint_id",
+            created_at="2021-01-01T00:00:00Z",
+            metadata={},
+            updated_at="2021-01-01T00:00:00Z",
+            description="endpoint_description",
+            url="endpoint_url",
+            version="v1",
+        )
+        mock_svix.endpoint.get_secret.return_value = EndpointSecretOut(key="secret_key")
 
         # Register the webhook by calling the /documents/webhook/ endpoint
         response = await async_client.post(
@@ -462,6 +504,25 @@ async def test_create_document_pdf_url_async_webhook(async_client, user):
         # Create a mock instance of SvixAsync
         mock_svix = AsyncMock()
         MockSvixAsync.return_value = mock_svix
+
+        # Set return values for the mocked methods
+        mock_svix.application.create.return_value = ApplicationOut(
+            id="app_id",
+            name="app_name",
+            created_at="2021-01-01T00:00:00Z",
+            metadata={},
+            updated_at="2021-01-01T00:00:00Z",
+        )
+        mock_svix.endpoint.create.return_value = EndpointOut(
+            id="endpoint_id",
+            created_at="2021-01-01T00:00:00Z",
+            metadata={},
+            updated_at="2021-01-01T00:00:00Z",
+            description="endpoint_description",
+            url="endpoint_url",
+            version="v1",
+        )
+        mock_svix.endpoint.get_secret.return_value = EndpointSecretOut(key="secret_key")
 
         # Register the webhook by calling the /documents/webhook/ endpoint
         response = await async_client.post(
@@ -1980,6 +2041,27 @@ async def test_document_fetch_failure_async_webhook(async_client, user):
             # Create a mock instance of SvixAsync
             mock_svix = AsyncMock()
             MockSvixAsync.return_value = mock_svix
+
+            # Set return values for the mocked methods
+            mock_svix.application.create.return_value = ApplicationOut(
+                id="app_id",
+                name="app_name",
+                created_at="2021-01-01T00:00:00Z",
+                metadata={},
+                updated_at="2021-01-01T00:00:00Z",
+            )
+            mock_svix.endpoint.create.return_value = EndpointOut(
+                id="endpoint_id",
+                created_at="2021-01-01T00:00:00Z",
+                metadata={},
+                updated_at="2021-01-01T00:00:00Z",
+                description="endpoint_description",
+                url="endpoint_url",
+                version="v1",
+            )
+            mock_svix.endpoint.get_secret.return_value = EndpointSecretOut(
+                key="secret_key"
+            )
 
             # Register the webhook by calling the /documents/webhook/ endpoint
             response = await async_client.post(

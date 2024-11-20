@@ -314,6 +314,12 @@ class WebhookIn(Schema):
     url: str
 
 
+class WebhookOut(Schema):
+    app_id: str
+    endpoint_id: str
+    webhook_secret: str
+
+
 class DocumentIn(Schema):
     name: str
     metadata: dict = Field(default_factory=dict)
@@ -373,11 +379,11 @@ class DocumentInPatch(Schema):
     "/documents/webhook/",
     auth=Bearer(),
     tags=["documents"],
-    response={200: GenericMessage, 400: GenericError},
+    response={200: WebhookOut, 400: GenericError},
 )
 async def add_webhook(
     request: Request, payload: WebhookIn
-) -> Tuple[int, GenericError] | Tuple[int, GenericMessage]:
+) -> Tuple[int, GenericError] | Tuple[int, WebhookOut]:
     """
     Add a webhook to the service.
 
@@ -416,7 +422,7 @@ async def add_webhook(
         await request.auth.asave()
 
         # create the webhook
-        await svix.endpoint.create(
+        endpoint_out = await svix.endpoint.create(
             app_id,
             EndpointIn(
                 url=payload.url,
@@ -425,7 +431,13 @@ async def add_webhook(
             ),
         )
 
-        return 200, GenericMessage(detail="Webhook added successfully.")
+        endpoint_secret_out = await svix.endpoint.get_secret(app_id, endpoint_out.id)
+
+        return 200, WebhookOut(
+            app_id=app_id,
+            endpoint_id=endpoint_out.id,
+            webhook_secret=endpoint_secret_out.key,
+        )
     except Exception as e:
         return 400, GenericError(detail="Error adding webhook: " + str(e))
 
