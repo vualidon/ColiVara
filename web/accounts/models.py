@@ -12,6 +12,8 @@ class CustomUser(AbstractUser):
     tier = models.CharField(max_length=50, choices=TIER, default="free")
     stripe_customer_id = models.CharField(max_length=255, blank=True)
     stripe_subscription_id = models.CharField(max_length=255, blank=True)
+    svix_application_id = models.CharField(max_length=255, blank=True)
+    svix_endpoint_id = models.CharField(max_length=255, blank=True)
     token = models.CharField(max_length=255, blank=True)
 
     def __str__(self) -> str:
