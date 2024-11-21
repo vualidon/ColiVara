@@ -359,7 +359,7 @@ class DocumentOut(Schema):
 
 class DocumentInPatch(Schema):
     name: Optional[str] = None
-    metadata: Optional[dict] = Field(default_factory=dict)
+    metadata: Optional[dict] = Field(default_factory=lambda: {})
     collection_name: Optional[str] = Field(
         "default_collection",
         description="""The name of the collection to which the document belongs. If not provided, the document will be added to the default_collection. Use 'all' to access all collections belonging to the user.""",
