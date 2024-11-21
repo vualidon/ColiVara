@@ -6,8 +6,15 @@ import pytest
 from accounts.models import CustomUser
 from api.middleware import add_slash
 from api.models import Collection, Document, Page, PageEmbedding
-from api.views import (Bearer, QueryFilter, QueryIn, filter_collections,
-                       filter_documents, filter_query, router)
+from api.views import (
+    Bearer,
+    QueryFilter,
+    QueryIn,
+    filter_collections,
+    filter_documents,
+    filter_query,
+    router,
+)
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
@@ -340,9 +347,9 @@ async def test_add_webhook(async_client, user):
         )
         mock_svix.endpoint.get_secret.return_value = EndpointSecretOut(key="secret_key")
 
-        # Register the webhook by calling the /documents/webhook/ endpoint
+        # Register the webhook by calling the /webhook/ endpoint
         response = await async_client.post(
-            "/documents/webhook/",
+            "/webhook/",
             json={"url": webhook_url},
             headers={"Authorization": f"Bearer {user.token}"},
         )
@@ -351,13 +358,22 @@ async def test_add_webhook(async_client, user):
         assert response.status_code == 200, "Failed to register webhook"
 
         # Verify that Svix application.create was called
-        mock_svix.application.create.assert_called_once(), "Svix application.create was not called"
+        (
+            mock_svix.application.create.assert_called_once(),
+            "Svix application.create was not called",
+        )
 
         # Verify that Svix endpoint.create was called
-        mock_svix.endpoint.create.assert_called_once(), "Svix endpoint.create was not called"
+        (
+            mock_svix.endpoint.create.assert_called_once(),
+            "Svix endpoint.create was not called",
+        )
 
         # Verify that Svix endpoint.get_secret was called
-        mock_svix.endpoint.get_secret.assert_called_once(), "Svix endpoint.get_secret was not called"
+        (
+            mock_svix.endpoint.get_secret.assert_called_once(),
+            "Svix endpoint.get_secret was not called",
+        )
 
 
 @override_settings(SVIX_TOKEN="")
@@ -365,9 +381,9 @@ async def test_add_webhook_no_token(async_client, user):
     # Define a mock webhook URL
     webhook_url = "http://localhost:8000/webhook-receive"
 
-    # Register the webhook by calling the /documents/webhook/ endpoint
+    # Register the webhook by calling the /webhook/ endpoint
     response = await async_client.post(
-        "/documents/webhook/",
+        "/webhook/",
         json={"url": webhook_url},
         headers={"Authorization": f"Bearer {user.token}"},
     )
@@ -391,9 +407,9 @@ async def test_add_webhook_error(async_client, user):
             "Failed to create application"
         )
 
-        # Register the webhook by calling the /documents/webhook/ endpoint
+        # Register the webhook by calling the /webhook/ endpoint
         response = await async_client.post(
-            "/documents/webhook/",
+            "/webhook/",
             json={"url": webhook_url},
             headers={"Authorization": f"Bearer {user.token}"},
         )
@@ -402,7 +418,10 @@ async def test_add_webhook_error(async_client, user):
         assert response.status_code == 400
 
         # Verify that Svix application.create was called
-        mock_svix.application.create.assert_called_once(), "Svix application.create was not called"
+        (
+            mock_svix.application.create.assert_called_once(),
+            "Svix application.create was not called",
+        )
 
 
 async def test_add_webhook_twice(async_client, user):
@@ -443,9 +462,9 @@ async def test_add_webhook_twice(async_client, user):
         )
         mock_svix.endpoint.get_secret.return_value = EndpointSecretOut(key="secret_key")
 
-        # Register the webhook by calling the /documents/webhook/ endpoint
+        # Register the webhook by calling the /webhook/ endpoint
         response = await async_client.post(
-            "/documents/webhook/",
+            "/webhook/",
             json={"url": webhook_url},
             headers={"Authorization": f"Bearer {user.token}"},
         )
@@ -453,9 +472,9 @@ async def test_add_webhook_twice(async_client, user):
         # Assert that the response is successful
         assert response.status_code == 200, "Failed to register webhook"
 
-        # Register the webhook again by calling the /documents/webhook/ endpoint
+        # Register the webhook again by calling the /webhook/ endpoint
         response = await async_client.post(
-            "/documents/webhook/",
+            "/webhook/",
             json={"url": webhook_url},
             headers={"Authorization": f"Bearer {user.token}"},
         )
@@ -464,13 +483,22 @@ async def test_add_webhook_twice(async_client, user):
         assert response.status_code == 200, "Failed to register webhook"
 
         # Verify that Svix application.create was called
-        mock_svix.application.create.assert_called_once(), "Svix application.create was not called"
+        (
+            mock_svix.application.create.assert_called_once(),
+            "Svix application.create was not called",
+        )
 
         # Verify that Svix endpoint.create was called once
-        mock_svix.endpoint.create.assert_called_once(), "Svix endpoint.create was not called"
+        (
+            mock_svix.endpoint.create.assert_called_once(),
+            "Svix endpoint.create was not called",
+        )
 
         # Verify that Svix endpoint.update was called once
-        mock_svix.endpoint.update.assert_called_once(), "Svix endpoint.update was not called"
+        (
+            mock_svix.endpoint.update.assert_called_once(),
+            "Svix endpoint.update was not called",
+        )
 
 
 async def test_create_document_pdf_url_await(async_client, user):
@@ -536,9 +564,9 @@ async def test_create_document_pdf_url_async_webhook(async_client, user):
         )
         mock_svix.endpoint.get_secret.return_value = EndpointSecretOut(key="secret_key")
 
-        # Register the webhook by calling the /documents/webhook/ endpoint
+        # Register the webhook by calling the /webhook/ endpoint
         response = await async_client.post(
-            "/documents/webhook/",
+            "/webhook/",
             json={"url": webhook_url},
             headers={"Authorization": f"Bearer {user.token}"},
         )
@@ -547,10 +575,16 @@ async def test_create_document_pdf_url_async_webhook(async_client, user):
         assert response.status_code == 200, "Failed to register webhook"
 
         # Verify that Svix application.create was called
-        mock_svix.application.create.assert_called_once(), "Svix application.create was not called"
+        (
+            mock_svix.application.create.assert_called_once(),
+            "Svix application.create was not called",
+        )
 
         # Verify that Svix endpoint.create was called
-        mock_svix.endpoint.create.assert_called_once(), "Svix endpoint.create was not called"
+        (
+            mock_svix.endpoint.create.assert_called_once(),
+            "Svix endpoint.create was not called",
+        )
 
         # Create a document with a PDF URL
         response = await async_client.post(
@@ -570,7 +604,10 @@ async def test_create_document_pdf_url_async_webhook(async_client, user):
         await asyncio.gather(*pending_tasks)
 
         # Verify that Svix message.create was called
-        mock_svix.message.create.assert_called_once(), "Svix message.create was not called"
+        (
+            mock_svix.message.create.assert_called_once(),
+            "Svix message.create was not called",
+        )
 
 
 # the update in upsert
@@ -2075,9 +2112,9 @@ async def test_document_fetch_failure_async_webhook(async_client, user):
                 key="secret_key"
             )
 
-            # Register the webhook by calling the /documents/webhook/ endpoint
+            # Register the webhook by calling the /webhook/ endpoint
             response = await async_client.post(
-                "/documents/webhook/",
+                "/webhook/",
                 json={"url": webhook_url},
                 headers={"Authorization": f"Bearer {user.token}"},
             )
@@ -2086,10 +2123,16 @@ async def test_document_fetch_failure_async_webhook(async_client, user):
             assert response.status_code == 200, "Failed to register webhook"
 
             # Verify that Svix application.create was called
-            mock_svix.application.create.assert_called_once(), "Svix application.create was not called"
+            (
+                mock_svix.application.create.assert_called_once(),
+                "Svix application.create was not called",
+            )
 
             # Verify that Svix endpoint.create was called
-            mock_svix.endpoint.create.assert_called_once(), "Svix endpoint.create was not called"
+            (
+                mock_svix.endpoint.create.assert_called_once(),
+                "Svix endpoint.create was not called",
+            )
 
             # Create a document with a PDF URL
             # Perform the POST request
@@ -2116,7 +2159,10 @@ async def test_document_fetch_failure_async_webhook(async_client, user):
             mock_get.assert_called_once()
 
             # Verify that Svix message.create was called
-            mock_svix.message.create.assert_called_once(), "Svix message.create was not called"
+            (
+                mock_svix.message.create.assert_called_once(),
+                "Svix message.create was not called",
+            )
 
 
 async def test_document_file_too_big(async_client, user):
