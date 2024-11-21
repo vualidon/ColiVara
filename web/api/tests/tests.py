@@ -432,6 +432,15 @@ async def test_add_webhook_twice(async_client, user):
             url="endpoint_url",
             version="v1",
         )
+        mock_svix.endpoint.update.return_value = EndpointOut(
+            id="endpoint_id",
+            created_at="2021-01-01T00:00:00Z",
+            metadata={},
+            updated_at="2021-01-01T00:00:00Z",
+            description="endpoint_description",
+            url="endpoint_url",
+            version="v1",
+        )
         mock_svix.endpoint.get_secret.return_value = EndpointSecretOut(key="secret_key")
 
         # Register the webhook by calling the /documents/webhook/ endpoint
@@ -457,8 +466,11 @@ async def test_add_webhook_twice(async_client, user):
         # Verify that Svix application.create was called
         mock_svix.application.create.assert_called_once(), "Svix application.create was not called"
 
-        # Verify that Svix endpoint.create was called twice
-        mock_svix.endpoint.create.call_count == 2, "Svix endpoint.create was not called twice"
+        # Verify that Svix endpoint.create was called once
+        mock_svix.endpoint.create.assert_called_once(), "Svix endpoint.create was not called"
+
+        # Verify that Svix endpoint.update was called once
+        mock_svix.endpoint.update.assert_called_once(), "Svix endpoint.update was not called"
 
 
 async def test_create_document_pdf_url_await(async_client, user):

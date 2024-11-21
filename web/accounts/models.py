@@ -13,6 +13,7 @@ class CustomUser(AbstractUser):
     stripe_customer_id = models.CharField(max_length=255, blank=True)
     stripe_subscription_id = models.CharField(max_length=255, blank=True)
     svix_application_id = models.CharField(max_length=255, blank=True)
+    svix_endpoint_id = models.CharField(max_length=255, blank=True)
     token = models.CharField(max_length=255, blank=True)
 
     def __str__(self) -> str:

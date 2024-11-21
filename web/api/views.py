@@ -18,7 +18,8 @@ from ninja.files import UploadedFile
 from ninja.security import HttpBearer
 from pgvector.utils import HalfVector
 from pydantic import Field, model_validator
-from svix.api import ApplicationIn, EndpointIn, MessageIn, SvixAsync
+from svix.api import (ApplicationIn, EndpointIn, EndpointUpdate, MessageIn,
+                      SvixAsync)
 from typing_extensions import Self
 
 from .models import Collection, Document, MaxSim, Page
@@ -417,19 +418,30 @@ async def add_webhook(
         else:
             app_id = request.auth.svix_application_id
 
-        # save the app_id to the user
-        request.auth.svix_application_id = app_id
-        await request.auth.asave()
+        if request.auth.svix_endpoint_id:
+            # update the webhook
+            endpoint_out = await svix.endpoint.update(
+                app_id,
+                request.auth.svix_endpoint_id,
+                EndpointUpdate(
+                    url=payload.url,
+                ),
+            )
+        else:
+            # create the webhook
+            endpoint_out = await svix.endpoint.create(
+                app_id,
+                EndpointIn(
+                    url=payload.url,
+                    version=1,
+                    description="User webhook",
+                ),
+            )
 
-        # create the webhook
-        endpoint_out = await svix.endpoint.create(
-            app_id,
-            EndpointIn(
-                url=payload.url,
-                version=1,
-                description="User webhook",
-            ),
-        )
+        # save the app_id and endpoint_id to the user
+        request.auth.svix_application_id = app_id
+        request.auth.svix_endpoint_id = endpoint_out.id
+        await request.auth.asave()
 
         endpoint_secret_out = await svix.endpoint.get_secret(app_id, endpoint_out.id)
 
