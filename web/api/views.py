@@ -71,7 +71,7 @@ class Bearer(HttpBearer):
 
 class CollectionIn(Schema):
     name: str
-    metadata: Optional[dict] = Field(default_factory=dict)
+    metadata: Optional[dict] = Field(default_factory=lambda: {})
 
     @model_validator(mode="after")
     def validate_name(self) -> Self:
