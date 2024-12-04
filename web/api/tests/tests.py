@@ -6,15 +6,8 @@ import pytest
 from accounts.models import CustomUser
 from api.middleware import add_slash
 from api.models import Collection, Document, Page, PageEmbedding
-from api.views import (
-    Bearer,
-    QueryFilter,
-    QueryIn,
-    filter_collections,
-    filter_documents,
-    filter_query,
-    router,
-)
+from api.views import (Bearer, QueryFilter, QueryIn, filter_collections,
+                       filter_documents, filter_query, router)
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
@@ -1682,6 +1675,30 @@ async def test_create_embedding(async_client, user):
     )
     assert response.status_code == 200
     assert response.json()["data"] != []
+
+
+async def test_create_embedding_invalid_input(async_client, user):
+    task = "image"
+    input_data = ["/Users/user/Desktop/image.png"]
+    response = await async_client.post(
+        "/embeddings/",
+        json={"task": task, "input_data": input_data},
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "detail": [
+            {
+                "type": "value_error",
+                "loc": ["body", "payload"],
+                "msg": "Value error, Each input must be a valid base64 string or a URL. Please use our Python SDK if you want to provide a file path.",
+                "ctx": {
+                    "error": "Each input must be a valid base64 string or a URL. Please use our Python SDK if you want to provide a file path."
+                },
+            }
+        ]
+    }
 
 
 async def test_create_embedding_service_down(async_client, user):
