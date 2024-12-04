@@ -1,8 +1,10 @@
 import asyncio
 import base64
 import logging
+import re
 from enum import Enum
 from typing import Dict, List, Optional, Tuple, Union
+from urllib.parse import urlparse
 
 import aiohttp
 from accounts.models import CustomUser
@@ -18,7 +20,8 @@ from ninja.files import UploadedFile
 from ninja.security import HttpBearer
 from pgvector.utils import HalfVector
 from pydantic import Field, model_validator
-from svix.api import ApplicationIn, EndpointIn, EndpointUpdate, MessageIn, SvixAsync
+from svix.api import (ApplicationIn, EndpointIn, EndpointUpdate, MessageIn,
+                      SvixAsync)
 from typing_extensions import Self
 
 from .models import Collection, Document, MaxSim, Page
@@ -1265,6 +1268,24 @@ class TaskEnum(str, Enum):
 class EmbeddingsIn(Schema):
     input_data: List[str]
     task: TaskEnum
+
+    @model_validator(mode="after")
+    def validate_input_data(self) -> Self:
+        if self.task == TaskEnum.image:
+            for value in self.input_data:
+                # Validate base64
+                base64_pattern = r"^[A-Za-z0-9+/]+={0,2}$"
+                is_base64 = re.match(base64_pattern, value) and len(value) % 4 == 0
+
+                # Validate URL
+                parsed = urlparse(value)
+                is_url = all([parsed.scheme, parsed.netloc])
+
+                if not (is_base64 or is_url):
+                    raise ValueError(
+                        "Each input must be a valid base64 string or a URL. Please use our Python SDK if you want to provide a file path."
+                    )
+        return self
 
 
 class EmbeddingsOut(Schema):
