@@ -1278,21 +1278,17 @@ class EmbeddingsIn(Schema):
                 is_base64 = re.match(base64_pattern, value) and len(value) % 4 == 0
 
                 # Validate URL
-                is_url = self.is_valid_url(value)
+                try:
+                    parsed = urlparse(value)
+                    is_url = all([parsed.scheme, parsed.netloc])
+                except Exception:
+                    is_url = False
 
                 if not (is_base64 or is_url):
                     raise ValueError(
                         "Each input must be a valid base64 string or a URL. Please use our Python SDK if you want to provide a file path."
                     )
         return self
-
-    @staticmethod
-    def is_valid_url(url: str) -> bool:
-        try:
-            parsed = urlparse(url)
-            return all([parsed.scheme, parsed.netloc])
-        except Exception:
-            return False
 
 
 class EmbeddingsOut(Schema):
