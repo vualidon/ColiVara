@@ -1701,6 +1701,26 @@ async def test_create_embedding_invalid_input(async_client, user):
     }
 
 
+async def test_create_embedding_valid_input_service_down(async_client, user):
+    task = "image"
+    input_data = ["https://tourism.gov.in/sites/default/files/2019-04/dummy-pdf_2.pdf"]
+    EMBEDDINGS_POST_PATH = "api.models.aiohttp.ClientSession.post"
+    # Create a mock response object with status 500
+    mock_response = AsyncMock()
+    mock_response.status = 500
+    mock_response.json.return_value = AsyncMock(return_value={"error": "Service Down"})
+    # Mock the context manager __aenter__ to return the mock_response
+    mock_response.__aenter__.return_value = mock_response
+    # Patch the aiohttp.ClientSession.post method to return the mock_response
+    with patch(EMBEDDINGS_POST_PATH, return_value=mock_response):
+        response = await async_client.post(
+            "/embeddings/",
+            json={"task": task, "input_data": input_data},
+            headers={"Authorization": f"Bearer {user.token}"},
+        )
+        assert response.status_code == 503
+
+
 async def test_create_embedding_service_down(async_client, user):
     task = "query"
     input_data = ["What is 1 + 1"]
