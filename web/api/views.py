@@ -1278,11 +1278,8 @@ class EmbeddingsIn(Schema):
                 is_base64 = re.match(base64_pattern, value) and len(value) % 4 == 0
 
                 # Validate URL
-                try:
-                    parsed = urlparse(value)
-                    is_url = all([parsed.scheme, parsed.netloc])
-                except Exception:
-                    is_url = False
+                parsed = urlparse(value)
+                is_url = all([parsed.scheme, parsed.netloc])
 
                 if not (is_base64 or is_url):
                     raise ValueError(
