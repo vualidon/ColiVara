@@ -1153,6 +1153,34 @@ async def test_patch_document_url(async_client, user, collection, document):
     await Document.objects.all().adelete()
 
 
+async def test_patch_document_url_proxy(async_client, user, collection, document):
+    # we update the URL of the document
+    response = await async_client.patch(
+        f"/documents/{document.name}/",
+        json={
+            "name": "Test Document Update",
+            "url": "https://www.w3schools.com/w3css/img_lights.jpg",
+            "collection_name": collection.name,
+            "use_proxy": True,
+        },
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+    assert response.status_code == 200
+    response_data = response.json()
+    assert response_data["id"] == 1
+    assert response_data["name"] == "Test Document Update"
+    assert response_data["metadata"] == {"important": True}
+    assert (
+        response_data["url"] == "http://www.w3schools.com/w3css/img_lights.jpg"
+    )  # converted to http because of the proxy
+    assert response_data["num_pages"] == 1
+    assert response_data["collection_name"] == "Test Collection Fixture"
+    assert response_data["pages"] is None
+
+    # now check if the document was actually updated
+    await Document.objects.all().adelete()
+
+
 async def test_patch_document_url_and_base64(async_client, user, collection, document):
     # we updated the base64 string of the page
     response = await async_client.patch(
