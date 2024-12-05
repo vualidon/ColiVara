@@ -2478,3 +2478,25 @@ async def test_convert_url_non_200_response():
     with patch(AIOHTTP_POST_PATH, return_value=mock_response):
         with pytest.raises(DjangoValidationError):
             await document._convert_url_to_pdf("https://example.com/doc.pdf")
+
+
+async def test_fetch_document_200_response():
+    AIOHTTP_GET_PATH = "api.models.aiohttp.ClientSession.get"
+
+    # Mock response with non-200 status
+    mock_response = AsyncMock()
+    mock_response.status = 200
+    mock_response.headers = {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": "",  # Empty content disposition
+        "Content-Length": "1000",
+    }
+    mock_response.__aenter__.return_value = mock_response
+
+    document = Document(url="https://examplepdf.com")
+
+    with patch(AIOHTTP_GET_PATH, return_value=mock_response):
+        content_type, filename, data = await document._fetch_document()
+
+        assert content_type == "application/pdf"
+        assert filename == "downloaded_file"

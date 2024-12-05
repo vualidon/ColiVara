@@ -507,7 +507,6 @@ class Document(models.Model):
             else:
                 # It's a regular file
                 logger.info(f"Fetching document from URL: {self.url}")
-                # document_data = await self._fetch_document()
                 if "application/pdf" in content_type:
                     extension = "pdf"
                 else:
