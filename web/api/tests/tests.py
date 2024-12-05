@@ -2457,3 +2457,24 @@ async def test_unknown_mime_type(collection):
 
     # Cleanup
     await document.delete_s3_file()
+
+
+async def test_prep_document_no_data():
+    document = Document()
+    with pytest.raises(DjangoValidationError):
+        await document._prep_document()
+
+
+async def test_convert_url_non_200_response():
+    AIOHTTP_POST_PATH = "api.models.aiohttp.ClientSession.post"
+
+    # Mock response with non-200 status
+    mock_response = AsyncMock()
+    mock_response.status = 404
+    mock_response.__aenter__.return_value = mock_response
+
+    document = Document()
+
+    with patch(AIOHTTP_POST_PATH, return_value=mock_response):
+        with pytest.raises(DjangoValidationError):
+            await document._convert_url_to_pdf("https://example.com/doc.pdf")
