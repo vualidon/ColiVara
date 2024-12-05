@@ -1894,6 +1894,39 @@ async def test_embeddings_service_down(async_client, user):
         }
 
 
+async def test_embeddings_service_error(async_client, user):
+    EMBEDDINGS_POST_PATH = "api.models.aiohttp.ClientSession.post"
+    # Create a mock response object with status 200 with an error message
+    mock_response = AsyncMock()
+    mock_response.status = 200
+    mock_response.json.return_value = AsyncMock(return_value={"error": "Service Down"})
+
+    # Mock the context manager __aenter__ to return the mock_response
+    mock_response.__aenter__.return_value = mock_response
+
+    # Patch the aiohttp.ClientSession.post method to return the mock_response
+    with patch(EMBEDDINGS_POST_PATH, return_value=mock_response) as mock_post:
+        # Perform the POST request to trigger embed_document
+        response = await async_client.post(
+            "/documents/upsert-document/",
+            json={
+                "name": "Test Document Fixture",
+                "url": "https://pdfobject.com/pdf/sample.pdf",
+                "wait": True,
+            },
+            headers={"Authorization": f"Bearer {user.token}"},
+        )
+
+        args, kwargs = mock_post.call_args
+        assert kwargs["json"]["input"]["task"] == "image"
+        assert "Authorization" in kwargs["headers"]
+
+        # Assert that the response status code reflects the failure
+        assert (
+            response.status_code == 400
+        )  # Assuming your view returns 400 on ValidationError
+
+
 async def test_embedding_service_down_query(async_client, user):
     EMBEDDINGS_POST_PATH = "api.views.aiohttp.ClientSession.post"
     # Create a mock response object with status 500
