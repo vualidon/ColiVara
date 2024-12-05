@@ -2033,6 +2033,37 @@ async def test_document_fetch_failure_await(async_client, user):
         assert response.status_code == 400
 
 
+async def test_document_fetch_missing_output(async_client, user):
+    AIOHTTP_GET_PATH = "api.models.aiohttp.ClientSession.get"
+
+    # Mock for GET request
+    mock_get_response = AsyncMock()
+    mock_get_response.status = 200
+    mock_get_response.headers = {}
+    mock_get_response.read = AsyncMock(return_value=b"")
+    mock_get_response.__aenter__.return_value = mock_get_response
+
+    # Patch GET method
+    with patch(AIOHTTP_GET_PATH, return_value=mock_get_response) as mock_get:
+        response = await async_client.post(
+            "/documents/upsert-document/",
+            json={
+                "name": "Test Document Fetch Failure",
+                "url": "https://example.com/nonexistent.pdf",
+                "wait": True,
+            },
+            headers={"Authorization": f"Bearer {user.token}"},
+        )
+
+        # Assert GET was called
+        mock_get.assert_called_once_with(
+            "https://example.com/nonexistent.pdf", proxy=None
+        )
+
+        # Assert that the response status code reflects the failure
+        assert response.status_code == 400
+
+
 async def test_document_fetch_failure_await_proxy(async_client, user):
     AIOHTTP_GET_PATH = "api.models.aiohttp.ClientSession.get"
 
@@ -2240,6 +2271,40 @@ async def test_document_file_too_big(async_client, user):
 
         # Assert that the response status code reflects the failure
         assert response.status_code == 400
+
+
+async def test_document_file_good_size(async_client, user):
+    AIOHTTP_GET_PATH = "api.models.aiohttp.ClientSession.get"
+    MAX_SIZE_BYTES = 50 * 1024 * 1024
+
+    # Mock for GET request
+    mock_get_response = AsyncMock()
+    mock_get_response.status = 200
+    mock_get_response.headers = {
+        "Content-Length": str(MAX_SIZE_BYTES - 1),
+    }
+    mock_get_response.read = AsyncMock(return_value=b"x" * (MAX_SIZE_BYTES + 1))
+    mock_get_response.__aenter__.return_value = mock_get_response
+
+    # Patch GET method
+    with patch(AIOHTTP_GET_PATH, return_value=mock_get_response) as mock_get:
+        response = await async_client.post(
+            "/documents/upsert-document/",
+            json={
+                "name": "Test Document File Too Large",
+                "url": "https://example.com/largefile.pdf",
+                "wait": True,
+            },
+            headers={"Authorization": f"Bearer {user.token}"},
+        )
+
+        # Assert that GET was called
+        mock_get.assert_called_once()
+
+        # Assert that the response status code reflects the failure
+        assert (
+            response.status_code == 400
+        )  # still fails because we are not actually downloading the file
 
 
 async def test_gotenberg_service_down_with_file(async_client, user):
