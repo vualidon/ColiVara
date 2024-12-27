@@ -84,7 +84,7 @@ Our documentation is available at [docs.colivara.com](https://docs.colivara.com)
 
 
 > [!NOTE]
-> If you prefer Swagger, you can try our endpoints at [ColiVara API Swagger](https://api.colivara.com/v1/docs/). You can also import an openAPI spec (for example for Postman) from the swagger documentation endpoint at [`v1/docs/openapi.json`](https://api.colivara.com/v1/docs/openapi.json)
+> If you prefer Swagger, you can try our endpoints at [ColiVara API Swagger](https://api.colivara.com/v1/docs). You can also import an openAPI spec (for example for Postman) from the swagger documentation endpoint at [`v1/docs/openapi.json`](https://api.colivara.com/v1/docs/openapi.json)
 
 
 ### Why?
