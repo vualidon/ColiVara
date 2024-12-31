@@ -16,10 +16,15 @@ It is a web-first implementation of the **ColPali** paper using ColQwen2 as the 
 
 1. Get a free API Key from the [ColiVara Website](https://colivara.com).
 
-2. Install the Python SDK and use it to interact with the API.
+2. Install our Python/Typescript SDK and use it to interact with the API.
 
 ```bash
 pip install colivara-py
+```
+or in Typescript
+
+```bash
+npm install colivara-ts
 ```
 
 3. Index a document. Colivara accepts a file url, or base64 encoded file, or a file path. We support over 100 file formats including PDF, DOCX, PPTX, and more. We will also automatically take a screenshot of URLs (webpages) and index them.
@@ -37,15 +42,38 @@ client = ColiVara(
 # Upload a document to the default_collection
 document = client.upsert_document(
     name="sample_document",
+    # You can use a file path, base64 encoded file, or a URL
     url="https://example.com/sample.pdf",
     # optional - add metadata
     metadata={"author": "John Doe"},
     # optional - specify a collection
     collection_name="user_1_collection", 
-    # optional - wait for the document to index
+    # optional - wait for the document to index. Webhooks are also supported.
     wait=True
 )
 ```
+or
+
+```typescript
+import { ColiVara } from 'colivara-ts';
+
+// Initialize the client
+const client = new ColiVara('your-api-key');
+
+// Upload a document
+const document = await client.upsertDocument({
+    name: 'sample_document',
+    // optional - specify a collection
+    collection_name: 'user_1_collection',
+    // You can use a file path, base64 encoded file, or a URL
+    url: 'https://example.com/sample.pdf',
+    // optional - wait for the document to index. Webhooks are also supported.
+    wait: true,
+    // optional - add metadata
+    metadata: { author: 'John Doe' }
+});
+```
+
 
 4. Search for a document. You can filter by collection name, collection metadata, and document metadata. You can also specify the number of results you want.
 
@@ -75,6 +103,40 @@ results = client.search(
 )
 # top 3 pages with the most relevant information
 print(results)
+```
+
+In Typescript: 
+
+```typescript
+// Simple search
+const results = await client.search({query: "what is 1+1?"})
+
+// search with a specific collection
+const results = await client.search({query: "what is 1+1?", collection_name: "user_1_collection"})
+
+// Search with a filter on document metadata
+const results = await client.search({
+    query: "what is 1+1?",
+    query_filter: {
+        on: "document",
+        key: "author",
+        value: "John Doe",
+        lookup: "key_lookup"
+    }
+})
+
+// search with a filter on collection metadata
+const results = await client.search({
+    query: "what is 1+1?",
+    query_filter: {
+        on: "collection",
+        key: ["tag1", "tag2"],
+        lookup: "has_any_keys"
+    }
+})
+
+// top 3 pages with the most relevant information
+console.log(results)
 ```
 
 ### Documentation:
@@ -125,6 +187,10 @@ We run a pipeline to convert them to images, and perform our normal image-based 
 **Can I use my vector database?**
 
 Yes - we have an embedding endpoint that only generates embeddings without saving or doing anything else. You can store these embeddings at your end. Keep in mind that we use late-interaction and multi-vectors, many vector databases do not support this yet.
+
+**Do I have to use the SDKs?**
+
+No - the SDKs are provided for your convenience. You can use the REST API directly if you prefer.
 
 ## Key Features
 
@@ -180,8 +246,9 @@ You can run the evaluation independently using our eval repo at: https://github.
 
    > You can run the embedding service separately and use your own storage and API for the rest of the components. The Embedding service is designed to be modular and can be used with any storage and API. (For example, if you want to use Qdrant for storage and Node for the API)
 
-4. Language-specific SDKs for the API (Typescript SDK Coming Soon)
+4. Language-specific SDKs for the API 
    1. Python SDK: [colivara-py](https://github.com/tjmlabs/colivara-py)
+   2. Typescript SDK: [colivara-ts](https://github.com/tjmlabs/colivara-ts)
 
 
 ## Getting Started (Local Setup)
