@@ -1072,7 +1072,7 @@ async def search_image(
     request: Request, payload: SearchImageIn
 ) -> Tuple[int, SearchImageOut] | Tuple[int, GenericError]:
     """
-    Search for pages similar to a given images.
+    Search for pages similar to a given image.
 
     This endpoint allows the user to search for pages similar to a given image.
     The search is performed across all documents in the specified collection.
@@ -1082,10 +1082,10 @@ async def search_image(
         payload (SearchImageIn): The input data for the search, which includes the image in base64 format and collection ID.
 
     Returns:
-        SearchImageOut: The search results, including the query and a list of similar pages.
+        SearchImageOut: The search results, a list of similar pages.
 
     Raises:
-        HttpError: If the collection does not exist or the query is invalid.
+        HttpError: If the collection does not exist or the img_base64 is invalid.
 
     Example:
         POST /search-image/
@@ -1299,7 +1299,9 @@ async def get_image_embeddings(img_base64: str) -> List:
             return out["output"]["data"][0]["embedding"]
 
 
-async def filter_query(payload: QueryIn, user: CustomUser) -> QuerySet[Page]:
+async def filter_query(
+    payload: Union[QueryIn, SearchImageIn], user: CustomUser
+) -> QuerySet[Page]:
     base_query = Page.objects.select_related("document__collection")
     if payload.collection_name == "all":
         base_query = base_query.filter(document__collection__owner=user)
