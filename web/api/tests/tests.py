@@ -1359,6 +1359,31 @@ async def test_search_image(async_client, user, collection, document):
     assert response.json() != []
 
 
+async def test_search_image_invalid_base64(async_client, user, collection, document):
+    response = await async_client.post(
+        "/search-image/",
+        json={
+            "img_base64": "Hello",
+            "top_k": 1,
+        },
+        headers={"Authorization": f"Bearer {user.token}"},
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "detail": [
+            {
+                "type": "value_error",
+                "loc": ["body", "payload"],
+                "msg": "Value error, Provided 'base64' is not valid. Please provide a valid base64 string.",
+                "ctx": {
+                    "error": "Provided 'base64' is not valid. Please provide a valid base64 string."
+                },
+            }
+        ]
+    }
+
+
 async def test_filter_collections(async_client, user, collection, document):
     response = await async_client.post(
         "/filter/",
