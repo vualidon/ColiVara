@@ -18,6 +18,11 @@
 ```bash
 pip install colivara-py
 ```
+or
+
+```bash
+npm install colivara-ts
+```
 
 3. Index a document (a file url, base64 encoded file, or path). It supports over 100 file formats including PDF, DOCX, PPTX, and more.
 
@@ -31,7 +36,7 @@ client = ColiVara(api_key=os.environ.get("COLIVARA_API_KEY"), # default and can 
 # Upload a document to the default_collection
 document = client.upsert_document(
                   name="sample_document",       
-                  url="https://example.com/sample.pdf",   # You can use a file path, base64 encoded file, or a URL
+                  document_url="https://example.com/sample.pdf",   # You can use a file path, base64 encoded file, or a URL
                   metadata={"author": "John Doe"},        # optional - add metadata
                   collection_name="user_1_collection",    # optional - specify a collection
                   wait=True                               # optional - wait for indexing (supports Webhooks)
@@ -283,6 +288,18 @@ docker-compose exec web pytest
 ```bash
 docker-compose exec web mypy .
 ```
+
+## Support
+For support, join our Discord community where you can:
+- Get help with setup and configuration
+- Report bugs and request features  
+- Connect with other ColiVara users
+- Stay updated on new releases and announcements
+
+Click the badge below to join:
+
+[![Discord](https://dcbadge.limes.pink/api/server/https://discord.gg/DtGRxWuj8y)](https://discord.gg/DtGRxWuj8y)
+
 
 ## License
 
