@@ -1,12 +1,13 @@
+<p align="center">
+  <img src="colivara-image-4.png" alt="ColiVara" width=650px>
+</p>
+
 # ColiVara 
 **State of the Art Retrieval - with a delightful developer experience**
 
-
 [![codecov](https://codecov.io/gh/tjmlabs/ColiVara/branch/main/graph/badge.svg)](https://codecov.io/gh/tjmlabs/ColiVara) [![Tests](https://github.com/tjmlabs/ColiVara/actions/workflows/test.yml/badge.svg)](https://github.com/tjmlabs/Colivara/actions/workflows/test.yml)
 
-<p align="center">
-  <img src="colivara-image-4.png" alt="ColiVara">
-</p>
+
 
 ### Quickstart:
 
