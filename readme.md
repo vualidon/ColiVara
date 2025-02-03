@@ -52,7 +52,7 @@ const document = await client.upsertDocument({
     // optional - specify a collection
     collection_name: 'user_1_collection',
     // You can use a file path, base64 encoded file, or a URL
-    url: 'https://example.com/sample.pdf',
+    document_url: 'https://example.com/sample.pdf',
     // optional - wait for the document to index. Webhooks are also supported.
     wait: true,
     // optional - add metadata
@@ -251,7 +251,7 @@ git clone https://github.com/tjmlabs/ColiVara
 2. Create a .env.dev file in the root directory with the following variables:
 
 ```
-EMBEDDINGS_URL="the serverless embeddings service url" # for local setup use http://localhost:8000/runsync/
+EMBEDDINGS_URL="the serverless embeddings service url" # for local setup use http://host.docker.internal:8000/runsync
 EMBEDDINGS_URL_TOKEN="the serverless embeddings service token"  # for local setup use any string will do.
 AWS_S3_ACCESS_KEY_ID="an S3 or compatible storage access key"
 AWS_S3_SECRET_ACCESS_KEY="an S3 or compatible storage secret key"
