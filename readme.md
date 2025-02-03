@@ -19,13 +19,13 @@
 pip install colivara-py
 ```
 
-3. Index a document. Colivara accepts a file url, or base64 encoded file, or a file path. We support over 100 file formats including PDF, DOCX, PPTX, and more. We will also automatically take a screenshot of URLs (webpages) and index them.
+3. Index a document (a file url, base64 encoded file, or path). It supports over 100 file formats including PDF, DOCX, PPTX, and more.
 
 ```python
 from colivara_py import ColiVara
 
-client = ColiVara(api_key=os.environ.get("COLIVARA_API_KEY"), # this is the default and can be omitted
-                  base_url="https://api.colivara.com"         # this is the default and can be omitted
+client = ColiVara(api_key=os.environ.get("COLIVARA_API_KEY"), # default and can be omitted
+                  base_url="https://api.colivara.com"         # default and can be omitted
                   )
 
 # Upload a document to the default_collection
@@ -34,7 +34,7 @@ document = client.upsert_document(
                   url="https://example.com/sample.pdf",   # You can use a file path, base64 encoded file, or a URL
                   metadata={"author": "John Doe"},        # optional - add metadata
                   collection_name="user_1_collection",    # optional - specify a collection
-                  wait=True                               # optional - wait for the document to index. Webhooks are also supported.
+                  wait=True                               # optional - wait for indexing (supports Webhooks)
 )
 
 ```
