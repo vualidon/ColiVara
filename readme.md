@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="colivara-image-4.png" alt="ColiVara" width=650px>
+  <img src="colivara-image.png" alt="ColiVara" width=650px>
 </p>
 
 # ColiVara 
