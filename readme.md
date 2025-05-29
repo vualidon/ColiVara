@@ -6,58 +6,6 @@
 
 **State of the Art Retrieval - with a delightful developer experience**
 
-[![codecov](https://codecov.io/gh/tjmlabs/ColiVara/branch/main/graph/badge.svg)](https://codecov.io/gh/tjmlabs/ColiVara) [![Tests](https://github.com/tjmlabs/ColiVara/actions/workflows/test.yml/badge.svg)](https://github.com/tjmlabs/Colivara/actions/workflows/test.yml)
-
-
-### Documentation
-
-Our documentation is available at [docs.colivara.com](https://docs.colivara.com).
-
-> [!NOTE]
-> If you prefer Swagger, you can try our endpoints at [ColiVara API Swagger](https://api.colivara.com/v1/docs). You can also import an openAPI spec (for example for Postman) from the swagger documentation endpoint at [`v1/docs/openapi.json`](https://api.colivara.com/v1/docs/openapi.json)
-
-### Why?
-
-RAG (Retrieval Augmented Generation) is a powerful technique that allows us to enhance LLMs (Language Models) output with private documents and proprietary knowledge that is not available elsewhere. (For example, a company's internal documents or a researcher's notes).
-
-However, it is limited by the quality of the text extraction pipeline. With limited ability to extract visual cues and other non-textual information, RAG can be suboptimal for documents that are visually rich.
-
-ColiVara uses vision models to generate embeddings for documents, allowing you to retrieve documents based on their visual content.
-
-_From the ColPali paper:_
-
-> Documents are visually rich structures that convey information through text, as well as tables, figures, page layouts, or fonts. While modern document retrieval systems exhibit strong performance on query-to-text matching, they struggle to exploit visual cues efficiently, hindering their performance on practical document retrieval applications such as Retrieval Augmented Generation.
-
-[Learn More in the ColPali Paper](https://arxiv.org/abs/2407.01449)
-
-**How does it work?**
-
-In short, ColPali is an advanced document retrieval model that leverages Vision Language Models to integrate both textual and visual elements for highly accurate and efficient document search. ColiVara builds on this model to provide a seamless and user-friendly API for document retrieval.
-
-**If my documents are text-based, why do I need ColiVara?**
-
-Even when your documents are text-based, ColiVara can provide a more accurate and efficient retrieval system. This is because ColiVara uses Late-Interaction style embeddings which is more accurate than pooled embeddings. Our benchmarks contains text-only datasets and we outperform existing systems on these datasets.
-
-**Do I need a vector database?**
-
-No - ColiVara uses Postgres and pgVector to store vectors for you. You DO NOT need to generate, save, or manage embeddings in anyway.
-
-**Do you covert the documents to markdown/text?**
-
-No - ColiVara treats everything as an image, and uses vision models. There are no parsing, chunking, or OCR involved. This method outperforms chunking, and OCR for both text-based documents and visual documents.
-
-**How does non-pdf documents or web pages work?**
-
-We run a pipeline to convert them to images, and perform our normal image-based retrieval. This all happen for you under the hood, and you get the top-k pages when performing retrieval.
-
-**Can I use my vector database?**
-
-Yes - we have an embedding endpoint that only generates embeddings without saving or doing anything else. You can store these embeddings at your end. Keep in mind that we use late-interaction and multi-vectors, many vector databases do not support this yet.
-
-**Do I have to use the SDKs?**
-
-No - the SDKs are provided for your convenience. You can use the REST API directly if you prefer.
-
 ## Key Features
 
 - **State of the Art retrieval**: ColiVara outperforms existing retrieval systems on both quality and latency.
