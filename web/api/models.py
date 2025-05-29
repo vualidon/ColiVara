@@ -242,7 +242,7 @@ class Document(models.Model):
             payload = {"input": {"task": "image", "input_data": images}}
             headers = {"Authorization": f"Bearer {settings.EMBEDDINGS_URL_TOKEN}"}
             async with session.post(
-                EMBEDDINGS_URL, json=payload, headers=headers
+                EMBEDDINGS_URL, json=payload, headers=headers, ssl=False
             ) as response:
                 if response.status != 200:
                     logger.error(

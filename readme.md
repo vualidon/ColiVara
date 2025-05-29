@@ -230,6 +230,11 @@ You can run the evaluation independently using our eval repo at: <https://github
 ## Getting Started (Local Setup)
 
 1. Setup the Embeddings Service (ColiVarE) - This is a separate repo and is required for the API to work. The directions are available here: [ColiVarE](https://github.com/tjmlabs/ColiVarE/blob/main/readme.md)
+
+```bash
+docker run --runtime=nvidia -p 8000:8005 vualidon1403/colivare:20250528
+```
+
 2. Clone the repo
 
 ```bash
@@ -250,11 +255,11 @@ AWS_STORAGE_REGION_NAME="an S3 or compatible storage bucket region name"
 3. Run the following commands:
 
 ```bash
-docker-compose up -d --build
-docker-compose exec web python manage.py migrate
-docker-compose exec web python manage.py createsuperuser
+docker compose up -d --build
+docker compose exec web python manage.py migrate
+docker compose exec web python manage.py createsuperuser
 # get the token from the superuser creation
-docker-compose exec web python manage.py shell
+docker compose exec web python manage.py shell
 from accounts.models import CustomUser
 user = CustomUser.objects.first().token 
 print(user) # save this token somewhere (use it for authorization)
@@ -264,13 +269,13 @@ print(user) # save this token somewhere (use it for authorization)
 5. To run tests - we have 100% test coverage
 
 ```bash
-docker-compose exec web pytest
+docker compose exec web pytest
 ```
 
 6. mypy for type checking
 
 ```bash
-docker-compose exec web mypy .
+docker compose exec web mypy .
 ```
 
 ## Support

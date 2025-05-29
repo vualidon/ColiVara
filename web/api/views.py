@@ -1261,7 +1261,7 @@ async def get_query_embeddings(query: str) -> List:
     }
     async with aiohttp.ClientSession() as session:
         async with session.post(
-            EMBEDDINGS_URL, json=payload, headers=headers
+            EMBEDDINGS_URL, json=payload, headers=headers, ssl=False
         ) as response:
             if response.status != 200:
                 logger.error(
@@ -1286,7 +1286,7 @@ async def get_image_embeddings(img_base64: str) -> List:
     }
     async with aiohttp.ClientSession() as session:
         async with session.post(
-            EMBEDDINGS_URL, json=payload, headers=headers
+            EMBEDDINGS_URL, json=payload, headers=headers, ssl=False
         ) as response:
             if response.status != 200:
                 logger.error(
@@ -1512,7 +1512,7 @@ async def embeddings(
     }
     async with aiohttp.ClientSession() as session:
         async with session.post(
-            EMBEDDINGS_URL, json=embed_payload, headers=headers
+            EMBEDDINGS_URL, json=embed_payload, headers=headers, ssl=False
         ) as response:
             if response.status != 200:
                 return 503, GenericError(
